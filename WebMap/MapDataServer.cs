@@ -556,6 +556,7 @@ namespace WebMap
                             + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + "}"
                             + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
                             + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
+                            + ",\"traders\":" + Traders.Json()
                             + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats()
                             + ",\"stats\":" + Stats.Json(PinsByName()) + "}";
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");

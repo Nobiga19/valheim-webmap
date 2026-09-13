@@ -151,6 +151,7 @@ namespace WebMap
             Pieces.Begin();
             Graves.Begin();
             Stats.BeginSweep();
+            Traders.ScanIfNeeded();                           // once, on the game thread
 
             var byPrefab = new Dictionary<int, int>();
 

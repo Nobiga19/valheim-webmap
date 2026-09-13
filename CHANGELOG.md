@@ -42,6 +42,8 @@
   after which the viewer never got to its overlays, pins or messages.
 * `/chart`: the world as a flat chart, each pixel its biome's colour and water one blue,
   sampled from the world generator once per world and kept beside `map.png`.
+* Traders (Haldor, Hildir, the Bog Witch) in `/state`, in explored ground only: the world
+  generated them, and a player's own map pins them once they have been near.
 * `/stats/players`: per-player tallies — joins, deaths, chat lines, distance covered, portal
   hops, pins, and what is standing in the world with their name on it (pieces, portals,
   ships, graves). No time played, by design. Persisted beside the world's map data.
