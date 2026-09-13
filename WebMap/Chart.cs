@@ -12,6 +12,8 @@ namespace WebMap
     // want the world as a reference surface rather than a picture.
     internal static class Chart
     {
+        // Bump when the picture's rules change, so a cached file is rebuilt.
+        private const string FileName = "chart.v2.png";
         private static volatile byte[] png;
         private static volatile bool building;
 
@@ -38,8 +40,9 @@ namespace WebMap
         public static void Load(string worldDataPath)
         {
             png = null;
-            string p = Path.Combine(worldDataPath, "chart.png");
+            string p = Path.Combine(worldDataPath, FileName);
             try { if (File.Exists(p)) png = File.ReadAllBytes(p); } catch { }
+            try { string old = Path.Combine(worldDataPath, "chart.png"); if (File.Exists(old)) File.Delete(old); } catch { }
             if (png == null) StaticCoroutine.Start(Build(worldDataPath));
         }
 
@@ -49,7 +52,8 @@ namespace WebMap
             building = true;
             int size = WebMapConfig.TEXTURE_SIZE, half = size / 2;
             float ps = WebMapConfig.PIXEL_SIZE, halfPx = ps / 2f;
-            var rgba = new byte[size * size * 4];
+            // one class per pixel: 0 = water, else the biome's bit index + 1
+            var cls = new byte[size * size];
             float water = ZoneSystem.instance.m_waterLevel;
             for (int y = 0; y < size; y++)
             {
@@ -60,24 +64,60 @@ namespace WebMap
                     float wx = (x - half) * ps + halfPx;
                     var biome = WorldGenerator.instance.GetBiome(wx, wz);
                     float h = WorldGenerator.instance.GetBiomeHeight(biome, wx, wz, out Color _);
-                    Color32 c = h < water ? Water : Albedo(biome);
-                    int o = (y * size + x) * 4;
-                    rgba[o] = c.r; rgba[o + 1] = c.g; rgba[o + 2] = c.b; rgba[o + 3] = 255;
+                    cls[y * size + x] = h < water ? (byte)0 : (byte)(Index(biome) + 1);
                 }
             }
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
+                    // Biome edges are noisy at 12 m a pixel -- a swamp came out as speckle --
+                    // so each pixel takes the class most of its 3x3 neighbourhood has.
+                    var smooth = new byte[cls.Length];
+                    var votes = new int[Classes];
+                    for (int y = 0; y < size; y++)
+                        for (int x = 0; x < size; x++)
+                        {
+                            Array.Clear(votes, 0, votes.Length);
+                            for (int dy = -1; dy <= 1; dy++)
+                            {
+                                int yy = y + dy; if (yy < 0 || yy >= size) continue;
+                                for (int dx = -1; dx <= 1; dx++)
+                                {
+                                    int xx = x + dx; if (xx < 0 || xx >= size) continue;
+                                    votes[cls[yy * size + xx]]++;
+                                }
+                            }
+                            int best = cls[y * size + x];
+                            for (int k = 0; k < Classes; k++) if (votes[k] > votes[best]) best = k;
+                            smooth[y * size + x] = (byte)best;
+                        }
+                    var rgba = new byte[size * size * 4];
+                    for (int i = 0; i < smooth.Length; i++)
+                    {
+                        Color32 c = smooth[i] == 0 ? Water : Albedo(BiomeAt(smooth[i] - 1));
+                        int o = i * 4;
+                        rgba[o] = c.r; rgba[o + 1] = c.g; rgba[o + 2] = c.b; rgba[o + 3] = 255;
+                    }
                     var bytes = ImageConv.EncodeRgbaToPNG(rgba, size, size);
                     png = bytes;
-                    File.WriteAllBytes(Path.Combine(worldDataPath, "chart.png"), bytes);
+                    File.WriteAllBytes(Path.Combine(worldDataPath, FileName), bytes);
                     ZLog.Log($"WebMap: chart built, {bytes.Length} bytes");
                 }
                 catch (Exception e) { ZLog.LogWarning("WebMap: chart not written: " + e.Message); }
                 finally { building = false; }
             });
         }
+
+        // Heightmap.Biome is a bit flag; the chart wants a small dense index.
+        private const int Classes = 1 + 32;
+        private static int Index(Heightmap.Biome b)
+        {
+            int v = (int)b, i = 0;
+            while (v > 1 && i < 31) { v >>= 1; i++; }
+            return i;
+        }
+        private static Heightmap.Biome BiomeAt(int index) => (Heightmap.Biome)(1 << index);
 
         public static byte[] GetPng() => png ?? new byte[0];
     }
