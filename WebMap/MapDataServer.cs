@@ -553,7 +553,7 @@ namespace WebMap
                         }
                         string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                             + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
-                            + ",\"structures\":" + StructureMap.Rev + "}"
+                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + "}"
                             + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
                             + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
                             + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats()

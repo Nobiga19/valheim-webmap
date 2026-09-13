@@ -16,6 +16,7 @@ namespace WebMap
         private const string FileName = "chart.v2.png";
         private static volatile byte[] png;
         private static volatile bool building;
+        public static volatile int Rev;                       // content revision, 0 until there is a chart
 
         private static readonly Color32 Water = new Color32(43, 79, 122, 255);
 
@@ -41,7 +42,7 @@ namespace WebMap
         {
             png = null;
             string p = Path.Combine(worldDataPath, FileName);
-            try { if (File.Exists(p)) png = File.ReadAllBytes(p); } catch { }
+            try { if (File.Exists(p)) { var b = File.ReadAllBytes(p); png = b; Rev = Fnv.Of(b); } } catch { }
             try { string old = Path.Combine(worldDataPath, "chart.png"); if (File.Exists(old)) File.Delete(old); } catch { }
             if (png == null) StaticCoroutine.Start(Build(worldDataPath));
         }
@@ -100,7 +101,7 @@ namespace WebMap
                         rgba[o] = c.r; rgba[o + 1] = c.g; rgba[o + 2] = c.b; rgba[o + 3] = 255;
                     }
                     var bytes = ImageConv.EncodeRgbaToPNG(rgba, size, size);
-                    png = bytes;
+                    png = bytes; Rev = Fnv.Of(bytes);
                     File.WriteAllBytes(Path.Combine(worldDataPath, FileName), bytes);
                     ZLog.Log($"WebMap: chart built, {bytes.Length} bytes");
                 }
