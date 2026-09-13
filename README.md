@@ -77,6 +77,7 @@ Standard BepInEx config, plus:
 |------|---------|
 | `/map`, `/map.jpg` | the world render; the JPEG is about a seventh the size |
 | `/fog` | explored mask (PNG) |
+| `/chart` | the world as a chart: each pixel its biome's flat colour, water one blue, no relief (PNG, once per world) |
 | `/structures`, `/structures/stats` | structures overlay; counts by prefab and the last sweep's cost |
 | `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour (JSON, about 60 KB for a world) |

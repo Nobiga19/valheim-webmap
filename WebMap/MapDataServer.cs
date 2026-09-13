@@ -453,6 +453,15 @@ namespace WebMap
                     res.ContentLength64 = fogBytes.Length;
                     res.Close(fogBytes, true);
                     return true;
+                case "/chart":
+                    // one image per world, never changing: let the edge keep it
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=3600");
+                    res.ContentType = "image/png";
+                    res.StatusCode = 200;
+                    byte[] chartBytes = Chart.GetPng();
+                    res.ContentLength64 = chartBytes.Length;
+                    res.Close(chartBytes, true);
+                    return true;
                 case "/messages":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";

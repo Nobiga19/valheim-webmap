@@ -40,6 +40,8 @@
   every 30 s instead of re-pulling both overlays on timers, and loads the world render as
   the JPEG: browsers gave up on the 16 MB PNG a 4096 render produces part way through,
   after which the viewer never got to its overlays, pins or messages.
+* `/chart`: the world as a flat chart, each pixel its biome's colour and water one blue,
+  sampled from the world generator once per world and kept beside `map.png`.
 * `/stats/players`: per-player tallies — joins, deaths, chat lines, distance covered, portal
   hops, pins, and what is standing in the world with their name on it (pieces, portals,
   ships, graves). No time played, by design. Persisted beside the world's map data.

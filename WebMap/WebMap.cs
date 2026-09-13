@@ -126,6 +126,7 @@ namespace WebMap
             worldDataPath = Path.Combine(mapDataPath, WebMapConfig.GetWorldName());
             Directory.CreateDirectory(worldDataPath);
             Stats.Load(worldDataPath);
+            Chart.Load(worldDataPath);
 
             if (mapDataServer == null)
             {
