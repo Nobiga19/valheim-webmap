@@ -450,6 +450,7 @@ namespace WebMap
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
                     byte[] fogBytes = GetFogPng();
+                    if (fogBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
                     res.ContentLength64 = fogBytes.Length;
                     res.Close(fogBytes, true);
                     return true;
@@ -459,6 +460,7 @@ namespace WebMap
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
                     byte[] chartBytes = Chart.GetPng();
+                    if (chartBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
                     res.ContentLength64 = chartBytes.Length;
                     res.Close(chartBytes, true);
                     return true;
@@ -483,6 +485,7 @@ namespace WebMap
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
                     byte[] structureBytes = StructureMap.GetPng();
+                    if (structureBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
                     res.ContentLength64 = structureBytes.Length;
                     res.Close(structureBytes, true);
                     return true;
@@ -491,6 +494,7 @@ namespace WebMap
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
                     byte[] forestBytes = ForestMap.GetPng();
+                    if (forestBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
                     res.ContentLength64 = forestBytes.Length;
                     res.Close(forestBytes, true);
                     return true;
