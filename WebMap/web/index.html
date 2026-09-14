@@ -113,6 +113,8 @@
   .legend [data-layer]{cursor:pointer;user-select:none}
   .legend span[data-layer]:not(.sw):not(.ic):hover{color:var(--ink)}
   .legend [data-layer].off{opacity:.32;text-decoration:line-through}
+  /* the atlas is flat by design: its forest row is parked, not switched off */
+  body.atlas .legend [data-layer="forest"]{opacity:.45;pointer-events:none}
   .no-portal .marker.portal,.no-portal #portalLinks{display:none}
   .no-grave .marker.grave{display:none}
   .no-trader .marker.trader{display:none}
@@ -301,7 +303,8 @@ function drawRaster(){
   if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
   const v = {scale, tx, ty, w:W, h:H};
   MapCore.drawRasters(rctx, v, LAYERS.imgs,
-    {bg:"#000", ground:GROUND, forest:!HIDDEN.has("forest"), structures:!HIDDEN.has("builds") && !PIECES});
+    {bg:"#000", ground:GROUND, forest:!HIDDEN.has("forest") && GROUND !== "atlas",
+     structures:!HIDDEN.has("builds") && !PIECES});
   if(PIECES && !HIDDEN.has("builds"))
     MapCore.drawPieces(rctx, v, PIECES, {plan: scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
 }
@@ -460,10 +463,17 @@ function drawThumbs(){
     drawThumb(el.querySelector("canvas"), el.dataset.ground);
   });
 }
+// the atlas carries no forest shading, so its legend row waits, dimmed, for the terrain
+function applyGround(){
+  const atlas = GROUND === "atlas";
+  document.body.classList.toggle("atlas", atlas);
+  document.querySelectorAll('.legend [data-layer="forest"]').forEach(el => el.title = atlas ? "not drawn on the atlas" : "");
+}
+applyGround();
 function setGround(g){
   GROUND = g;
   try{ localStorage.setItem("xnv.ground", g); }catch(e){}
-  drawThumbs(); drawRaster();
+  applyGround(); drawThumbs(); drawRaster();
 }
 function nextGround(){ setGround(GROUNDS[(GROUNDS.findIndex(x => x[0] === GROUND) + 1) % GROUNDS.length][0]); }
 groundsEl.addEventListener("click", e => { const el = e.target.closest(".gcard"); if(el) setGround(el.dataset.ground); });
@@ -618,7 +628,7 @@ let GRAVES = [];          // tombstones still standing, i.e. gear still out ther
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14c";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-14d";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
