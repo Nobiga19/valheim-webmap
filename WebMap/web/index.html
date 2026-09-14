@@ -411,7 +411,7 @@ try{ const saved = localStorage.getItem("xnv.hidden");
 const PRESETS = [
   ["Everything", []],
   ["Travel",     ["forest", "plan", "grave"]],
-  ["Builds",     ["forest", "vehicles", "portal", "grave", "trader", "pin"]],
+  ["Builds",     ["vehicles", "portal", "grave", "trader", "pin"]],
   ["Wilds",      ["builds", "plan", "vehicles", "portal"]],
   ["Bare",       ["forest", "builds", "plan", "vehicles", "portal", "grave", "trader", "pin"]],
 ];
@@ -618,7 +618,7 @@ let GRAVES = [];          // tombstones still standing, i.e. gear still out ther
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14b";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-14c";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
