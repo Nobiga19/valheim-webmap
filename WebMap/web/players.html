@@ -102,7 +102,7 @@
 <script>
 const API = MapCore.cfg.api;
 // the brand is the world's name, which only the config carries
-MapCore.fetchConfig(API).then(c => MapCore.setGeom(c)).catch(() => {});
+MapCore.fetchConfig(API).catch(() => {});
 let SORT = "seen", LAST = "", LOADED = false, DATA = [], SINCE = 0;
 
 function esc(t){ return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
