@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* A Layers card on the map, as on Google Maps: a thumbnail of the other ground in the
+  corner, and behind it the choice of ground -- the world render, or the flat biome
+  atlas the portals page draws on -- and presets of the legend (Everything, Travel,
+  Builds, Wilds, Bare). `L` cycles the ground. Graves are off by default, like portals.
+
 ## 2.11.0
 
 * The bundled viewer is now the same site that fronts our own server: the live map with

@@ -41,7 +41,9 @@ After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 
 The viewer at `http://your_ip:port` is four pages — the live map, a portal atlas drawn on
 a biome chart, a planning board for drawing and sharing routes, and per-player tallies —
-with a Layers list on the map to switch each layer off. Its source is `WebMap/web`; our own hosted copy at
+with a legend that switches each layer and a Layers card, as on Google Maps, holding
+presets of the legend and the choice of ground: the render, or the flat biome atlas.
+Its source is `WebMap/web`; our own hosted copy at
 [xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
 Players only appear once they set **visible to other players** on the in-game map (`m`).

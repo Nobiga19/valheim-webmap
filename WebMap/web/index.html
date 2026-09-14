@@ -122,6 +122,31 @@
   .mapctl button{width:36px;height:36px;border-radius:.45rem;border:1px solid var(--line);
     background:rgba(18,21,15,.9);color:var(--ink);font-size:1rem;cursor:pointer;line-height:1}
   .mapctl button:hover{border-color:var(--gold);color:var(--gold)}
+  /* The layers card, as on Google Maps: a thumbnail of the other ground in the
+     corner; hovering it (a tap, where nothing hovers) opens the grounds and presets. */
+  .layers{position:absolute;left:.7rem;bottom:.7rem;z-index:10;display:flex;align-items:flex-end;gap:.5rem}
+  .lcard{position:relative;width:68px;height:68px;padding:0;border:2px solid rgba(231,226,212,.85);
+    border-radius:.5rem;overflow:hidden;background:#000;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6)}
+  .lcard canvas{display:block;width:64px;height:64px}
+  .lcard .lbl{position:absolute;left:0;right:0;bottom:0;font-size:.62rem;font-weight:600;color:#fff;
+    background:rgba(10,12,10,.72);padding:2px 0;text-align:center;letter-spacing:.04em}
+  .lcard:hover{border-color:var(--gold)}
+  .tray{display:none;flex-direction:column;gap:.55rem;padding:.6rem .75rem;font-size:.72rem;color:var(--muted);
+    background:rgba(18,21,15,.94);border:1px solid var(--line);border-radius:.6rem;backdrop-filter:blur(4px)}
+  .layers:hover .tray,.layers.open .tray{display:flex}
+  .trow{display:flex;align-items:center;gap:.7rem}
+  .trow .tk{width:2.6rem;font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+  .grounds{display:flex;gap:.55rem}
+  .gcard{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:0;border:0;background:none;
+    color:var(--muted);cursor:pointer;font-size:.68rem}
+  .gcard canvas{width:56px;height:56px;border-radius:.4rem;border:2px solid transparent;background:#000}
+  .gcard:hover,.gcard.on{color:var(--ink)}
+  .gcard.on canvas{border-color:var(--gold)}
+  .presets{display:flex;gap:.35rem;flex-wrap:wrap}
+  .chip{padding:.2rem .6rem;border-radius:1rem;border:1px solid var(--line);background:rgba(255,255,255,.03);
+    color:var(--muted);cursor:pointer;font-size:.68rem}
+  .chip:hover{color:var(--ink);border-color:var(--gold)}
+  .chip.on{color:#0d0f0e;background:var(--gold);border-color:var(--gold);font-weight:600}
   .stage:fullscreen,.stage:-webkit-full-screen{width:100vw;height:100vh}
 
   .modal{position:fixed;inset:0;z-index:100;background:rgba(4,6,4,.72);
@@ -150,6 +175,7 @@
   .types b{color:var(--ink);font-weight:600}
   @media (max-width:760px){
     .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:20;box-shadow:0 0 30px rgba(0,0,0,.6)}
+    .layers{left:auto;right:3.6rem;flex-direction:row-reverse}
   }
 </style>
 </head>
@@ -177,7 +203,7 @@
       <div id="feed"></div>
     </div>
     <div class="legend">
-      <h3>Layers <small>click a row to hide or show it</small></h3>
+      <h3>Legend <small>click a row to hide or show it</small></h3>
       <span class="sw sw2" data-layer="forest"></span><span data-layer="forest">forest → cleared</span>
       <span class="sw" data-layer="builds" style="background:#966c42"></span><span data-layer="builds">builds</span>
       <span class="ic" data-layer="plan"><svg style="width:18px;height:18px"><use href="#ic-plan"></use></svg></span><span data-layer="plan">floor plan when close</span>
@@ -199,6 +225,13 @@
     <canvas id="mapCanvas" aria-label="Valheim world map"></canvas>
     <svg id="portalLinks" preserveAspectRatio="none" aria-hidden="true"></svg>
     <div class="markers" id="markers"></div>
+    <div class="layers" id="layers">
+      <button class="lcard" id="lcard" title="Switch ground (L)"><canvas id="lthumb"></canvas><span class="lbl">Layers</span></button>
+      <div class="tray">
+        <div class="trow"><span class="tk">Ground</span><div class="grounds" id="grounds"></div></div>
+        <div class="trow"><span class="tk">Show</span><div class="presets" id="presets"></div></div>
+      </div>
+    </div>
     <div class="mapui">
       <div class="mapctl">
         <button id="zoomIn"  title="Zoom in">+</button>
@@ -236,10 +269,11 @@
     </div>
 
     <h3>Layers</h3>
-    <p>Each row in the sidebar's <b>Layers</b> list is a switch, remembered by this browser.
-       Zoomed right in, builds turn from roofs into a floor plan; hide <b>floor plan when
-       close</b> to keep the roofs. Portal lines join linked pairs, and a grave is gear
-       still lying there.</p>
+    <p>Each row of the sidebar's <b>Legend</b> is a switch, remembered by this browser; the
+       <b>Layers</b> card on the map holds presets of them and swaps the ground between the
+       terrain render and a flat atlas of biomes (<b>L</b> cycles). Zoomed right in, builds
+       turn from roofs into a floor plan; hide <b>floor plan when close</b> to keep the
+       roofs. Portal lines join linked pairs, and a grave is gear still lying there.</p>
 
     <h3>Show yourself on the map</h3>
     <p>Press <b>M</b> in game and turn on <b>visible to other players</b>. Without it you
@@ -267,7 +301,7 @@ function drawRaster(){
   if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
   const v = {scale, tx, ty, w:W, h:H};
   MapCore.drawRasters(rctx, v, LAYERS.imgs,
-    {bg:"#000", forest:!HIDDEN.has("forest"), structures:!HIDDEN.has("builds") && !PIECES});
+    {bg:"#000", ground:GROUND, forest:!HIDDEN.has("forest"), structures:!HIDDEN.has("builds") && !PIECES});
   if(PIECES && !HIDDEN.has("builds"))
     MapCore.drawPieces(rctx, v, PIECES, {plan: scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
 }
@@ -369,16 +403,77 @@ function graveAge(sec){
 
 // Which layers this viewer has switched off. Classes on the stage do the hiding,
 // so markers rebuilt on every tick need no extra bookkeeping.
-const HIDDEN = new Set(["portal"]);      // portals sit on top of the builds they are in: off by default
+// portals sit on top of the builds they are in, graves are someone's bad day: both off until asked for
+const HIDDEN = new Set(["portal", "grave"]);
 try{ const saved = localStorage.getItem("xnv.hidden");
      if(saved !== null){ HIDDEN.clear(); JSON.parse(saved).forEach(k=>HIDDEN.add(k)); } }catch(e){}
+// A preset is a whole legend at once. Its chip lights while the legend matches it exactly.
+const PRESETS = [
+  ["Everything", []],
+  ["Travel",     ["forest", "plan", "grave"]],
+  ["Builds",     ["forest", "vehicles", "portal", "grave", "trader", "pin"]],
+  ["Wilds",      ["builds", "plan", "vehicles", "portal"]],
+  ["Bare",       ["forest", "builds", "plan", "vehicles", "portal", "grave", "trader", "pin"]],
+];
+function markPresets(){
+  const now = [...HIDDEN].sort().join();
+  document.querySelectorAll("#presets .chip").forEach((el, i) =>
+    el.classList.toggle("on", PRESETS[i][1].slice().sort().join() === now));
+}
+document.getElementById("presets").innerHTML =
+  PRESETS.map(([n]) => `<button class="chip">${n}</button>`).join("");
+document.getElementById("presets").addEventListener("click", e => {
+  const el = e.target.closest(".chip"); if(!el) return;
+  HIDDEN.clear(); PRESETS[[...el.parentNode.children].indexOf(el)][1].forEach(k => HIDDEN.add(k));
+  applyHidden(); drawRaster();
+});
 function applyHidden(){
   const st = document.getElementById("stage");
   [...st.classList].filter(c=>c.startsWith("no-")).forEach(c=>st.classList.remove(c));
   HIDDEN.forEach(k=>st.classList.add("no-"+k));
   document.querySelectorAll(".legend [data-layer]").forEach(el=>el.classList.toggle("off", HIDDEN.has(el.dataset.layer)));
+  markPresets();
   try{ localStorage.setItem("xnv.hidden", JSON.stringify([...HIDDEN])); }catch(e){}
 }
+// The ground: the world render, or the server's flat chart of biomes that the atlas
+// uses. Thumbnails are the explored ground itself, at a stamp's size, fog and all.
+const GROUNDS = [["terrain", "Terrain"], ["atlas", "Atlas"]];
+let GROUND = "terrain", EXPLORED_BOX = null;
+try{ const g = localStorage.getItem("xnv.ground"); if(GROUNDS.some(x => x[0] === g)) GROUND = g; }catch(e){}
+const groundsEl = document.getElementById("grounds");
+groundsEl.innerHTML = GROUNDS.map(([k, n]) =>
+  `<button class="gcard" data-ground="${k}"><canvas></canvas><span>${n}</span></button>`).join("");
+function drawThumb(cv, ground){
+  const N = 64, pix = Math.min(devicePixelRatio || 1, 2);
+  if(cv.width !== N*pix){ cv.width = cv.height = N*pix; }
+  const b = EXPLORED_BOX || {x:0, y:0, w:SIZE, h:SIZE};
+  const k = N/(Math.max(b.w, b.h)*1.15);
+  MapCore.drawRasters(cv.getContext("2d"), {scale:k, tx:N/2 - (b.x + b.w/2)*k, ty:N/2 - (b.y + b.h/2)*k, w:N, h:N, pix},
+    LAYERS.imgs, {bg:"#000", ground});
+}
+function drawThumbs(){
+  const next = GROUNDS[(GROUNDS.findIndex(x => x[0] === GROUND) + 1) % GROUNDS.length];
+  drawThumb(document.getElementById("lthumb"), next[0]);
+  document.getElementById("lcard").title = `Switch to ${next[1]} (L)`;
+  groundsEl.querySelectorAll(".gcard").forEach(el => {
+    el.classList.toggle("on", el.dataset.ground === GROUND);
+    drawThumb(el.querySelector("canvas"), el.dataset.ground);
+  });
+}
+function setGround(g){
+  GROUND = g;
+  try{ localStorage.setItem("xnv.ground", g); }catch(e){}
+  drawThumbs(); drawRaster();
+}
+function nextGround(){ setGround(GROUNDS[(GROUNDS.findIndex(x => x[0] === GROUND) + 1) % GROUNDS.length][0]); }
+groundsEl.addEventListener("click", e => { const el = e.target.closest(".gcard"); if(el) setGround(el.dataset.ground); });
+// with a pointer that hovers the tray is already open, so the card itself is the
+// switch; a finger opens the tray instead and picks from it
+const layersEl = document.getElementById("layers");
+document.getElementById("lcard").addEventListener("click", () => {
+  if(matchMedia("(hover: hover)").matches) nextGround(); else layersEl.classList.toggle("open");
+});
+document.addEventListener("pointerdown", e => { if(!e.target.closest("#layers")) layersEl.classList.remove("open"); });
 document.querySelector(".legend").addEventListener("click", e=>{
   const el = e.target.closest("[data-layer]"); if(!el) return;
   const k = el.dataset.layer;
@@ -428,10 +523,12 @@ function fitExplored(doFit = true){
   }
   EXPLORED = seen/(N*N);
   renderTiles();
+  const k = SIZE/N;
+  EXPLORED_BOX = x1 < 0 ? null : {x:x0*k, y:y0*k, w:(x1-x0+1)*k, h:(y1-y0+1)*k};
+  drawThumbs();
   if(!doFit) return;
   if(x1 < 0) return fitView();
-  const k = SIZE/N;
-  fitBox(x0*k, y0*k, (x1-x0+1)*k, (y1-y0+1)*k);
+  fitBox(EXPLORED_BOX.x, EXPLORED_BOX.y, EXPLORED_BOX.w, EXPLORED_BOX.h);
 }
 
 function zoomAt(cx, cy, factor){
@@ -453,7 +550,7 @@ let last = null, pinch = null;
 stage.addEventListener("pointerdown", e => {
   // Don't start a drag on the controls: capturing the pointer here retargets
   // the pointerup to the stage, so the button never receives its click.
-  if (e.target.closest && e.target.closest(".mapui")) return;
+  if (e.target.closest && e.target.closest(".mapui, .layers")) return;
   stage.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
   if(pts.size === 1){ last = {x:e.clientX, y:e.clientY}; stage.classList.add("dragging"); }
@@ -502,7 +599,10 @@ function showHelp(on){ helpEl.hidden = !on; }
 document.getElementById("helpBtn").addEventListener("click", e => { e.preventDefault(); showHelp(true); });
 document.getElementById("helpClose").addEventListener("click", () => showHelp(false));
 helpEl.addEventListener("click", e => { if(e.target === helpEl) showHelp(false); });
-addEventListener("keydown", e => { if(e.key === "Escape") showHelp(false); });
+addEventListener("keydown", e => {
+  if(e.key === "Escape") showHelp(false);
+  else if((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && !e.altKey) nextGround();
+});
 
 // ---------- live data (straight from the server) ----------
 // No committed snapshots: the page reads the game server at the deployment's own
@@ -511,14 +611,14 @@ addEventListener("keydown", e => { if(e.key === "Escape") showHelp(false); });
 const API = MapCore.cfg.api;
 // any layer arriving or refreshing is a redraw; a fresh fog also re-tests which
 // builds stand in ground someone has walked
-const LAYERS = MapCore.layers(API, k => { if(k === "fog" && PIECES_ALL) refilterPieces(); else drawRaster(); });
+const LAYERS = MapCore.layers(API, k => { if(k === "fog" && PIECES_ALL) refilterPieces(); else drawRaster(); drawThumbs(); });
 let VEHICLES = null;      // boats and carts, refreshed on the slow tick; null = not fetched
 let PORTALS = [];         // portals and the links between connected pairs
 let GRAVES = [];          // tombstones still standing, i.e. gear still out there
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14a";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-14b";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -613,6 +713,7 @@ async function tickState(){
   renderTiles();
   if(s.messages) renderFeed(s.messages);
   await LAYERS.sync(s.rev, {
+    chart: true,                    // the atlas ground, and the card's thumbnail of it
     pieces: setPieces,
     structures: () => !PIECES,      // the raster only stands in until the footprints land
     onFog: () => setTimeout(()=>fitExplored(false), 60),

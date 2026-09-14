@@ -114,7 +114,8 @@ function layers(base, onLoad){
 // One blit per layer, of the visible window only: base, forest twice, the
 // structures raster while the pieces are absent, fog last. Nearest-neighbour for
 // the base once a texture pixel is bigger than a screen pixel.
-// v: {scale, tx, ty, w, h, pix?}   o: {bg, forest, structures, fogReady}
+// v: {scale, tx, ty, w, h, pix?}   o: {bg, forest, structures, fogReady, ground}
+// ground: "terrain" (the render) or "atlas" (the server's flat biome chart, when it has come)
 function drawRasters(g, v, imgs, o){
   o = o || {};
   const W = v.w, H = v.h, pix = v.pix || 1;
@@ -134,7 +135,10 @@ function drawRasters(g, v, imgs, o){
   const fogIn = o.fogReady === undefined
     ? !!(imgs.fog && imgs.fog.complete && imgs.fog.naturalWidth) : !!o.fogReady;
   if(fogIn){
-    blit(imgs.base, v.scale < 3, "source-over");
+    const atlas = o.ground === "atlas" && imgs.chart && imgs.chart.complete && imgs.chart.naturalWidth;
+    // the render goes crisp once its pixels outgrow the screen's; the flat chart
+    // stays smoothed, a soft edge between two biomes reading better than a stair
+    blit(atlas ? imgs.chart : imgs.base, !!atlas || v.scale < 3, "source-over");
     // multiplied twice, which squares the effect: dense woods go markedly darker
     // while a thinned patch barely moves, so the difference reads at a glance
     if(o.forest){ blit(imgs.forest, true, "multiply"); blit(imgs.forest, true, "multiply"); }
