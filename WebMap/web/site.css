@@ -24,4 +24,33 @@
 .navlinks .ext a{color:var(--muted)}
 .navlinks .ext a::after{content:"\2197";font-size:.7em;margin-left:.25em;opacity:.7}
 .navlinks a.here{color:var(--gold)}
-@media (max-width:760px){ .brand{font-size:.8rem} }
+/* on a phone the bar swipes; a fade at the edge says so, over blank padding so the
+   last link is never under it */
+@media (max-width:760px){
+  .brand{font-size:.8rem}
+  .navlinks{gap:.9rem;padding-right:2.2rem}
+  .nav::after{content:"";position:absolute;right:0;top:0;bottom:0;width:2.2rem;pointer-events:none;
+    background:linear-gradient(90deg,rgba(18,21,15,0),#12150f 70%)}
+}
+
+/* ---------- app shell ---------- */
+/* A page with a sidebar: the bar, then the sidebar beside a stage that fills the
+   rest. The ☰ in the bar folds the sidebar away, one choice for the whole site
+   (MapCore.toggleSide). On a phone the sidebar is a drawer over the stage, shut
+   on arrival, with its own ×. */
+.sidebtn{width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:.45rem;
+  background:var(--card);color:var(--ink);font-size:1rem;line-height:1;cursor:pointer}
+.sidebtn:hover{border-color:var(--gold);color:var(--gold)}
+.app{display:flex;height:calc(100dvh - var(--nav));position:relative}
+.sidebar{width:var(--side);flex:0 0 var(--side);background:#12150f;border-right:1px solid var(--line);
+  overflow-y:auto;padding:1rem}
+body:not(.side-open) .sidebar{display:none}
+.stage{flex:1;position:relative;overflow:hidden}
+.sideclose{display:none}
+@media (max-width:760px){
+  .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:20;width:min(100%,360px);
+    box-shadow:0 0 30px rgba(0,0,0,.6)}
+  .sideclose{display:flex;position:sticky;top:0;float:right;width:34px;height:34px;align-items:center;
+    justify-content:center;margin:-.3rem -.3rem 0 .5rem;border:1px solid var(--line);border-radius:.45rem;
+    background:var(--card);color:var(--ink);font-size:1.2rem;line-height:1;cursor:pointer;z-index:1}
+}

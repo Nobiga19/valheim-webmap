@@ -43,7 +43,8 @@ The viewer at `http://your_ip:port` is four pages — the live map, a portal atl
 a biome chart, a planning board for drawing and sharing routes, and per-player tallies —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
-Its source is `WebMap/web`; our own hosted copy at
+The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
+holds across pages. Its source is `WebMap/web`; our own hosted copy at
 [xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
 Players only appear once they set **visible to other players** on the in-game map (`m`).

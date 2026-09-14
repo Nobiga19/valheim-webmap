@@ -46,7 +46,7 @@
   .bar .hide{display:none}
 
   /* ---------- app shell ---------- */
-  .app{display:flex;flex:1 1 auto;min-height:0;position:relative}
+  .app{display:flex;flex:1 1 auto;min-height:0;height:auto;position:relative}   /* the bar takes its share */
   .side{width:var(--side);flex:0 0 var(--side);background:#12150f;border-right:1px solid var(--line);
     overflow-y:auto;padding:.9rem}
   .side h3{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
@@ -102,15 +102,7 @@
     font-size:.8rem}
   .banner[hidden]{display:none}
   .banner b{color:var(--gold)}
-  .sidebtn{display:none}
-
-  @media (max-width:860px){
-    .side{position:absolute;left:0;top:0;bottom:0;z-index:20;box-shadow:0 0 30px rgba(0,0,0,.6)}
-    .side[hidden]{display:none}
-    .sidebtn{display:flex}
-  }
   @media (max-width:520px){
-    .side{width:100%;flex-basis:100%}
     #labelIn{width:110px}
     .bar{gap:.25rem;padding:.35rem .4rem}
     .bar .sep{display:none}
@@ -123,11 +115,10 @@
      so a stamp in the toolbar and the same stamp on the map are one source. -->
 <svg id="icons" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
 
-<nav class="nav" data-page="plan"></nav>
+<nav class="nav" data-page="plan" data-side></nav>
 <script>MapCore.nav();</script>
 
 <div class="bar">
-  <button class="tbtn sidebtn" id="sideBtn" title="Plan details">&#9776;</button>
   <div class="grp" id="tools"></div>
   <span class="sep"></span>
   <div class="grp" id="colors"></div>
@@ -142,7 +133,8 @@
 </div>
 
 <div class="app">
-  <aside class="side" id="side">
+  <aside class="side sidebar" id="side">
+    <button class="sideclose" type="button" aria-label="Close">&times;</button>
     <div class="blk">
       <h3>Plan</h3>
       <input type="text" id="titleIn" placeholder="Untitled plan" maxlength="80">
@@ -732,11 +724,6 @@ document.getElementById("newBtn").onclick = () => {
 document.getElementById("zoomIn").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1.35);
 document.getElementById("zoomOut").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1/1.35);
 document.getElementById("zoomFit").onclick = fitExplored;
-document.getElementById("sideBtn").onclick = () => {
-  const s = document.getElementById("side");
-  s.hidden = !s.hidden;
-  setTimeout(keepCentre, 0);
-};
 function keepCentre(){
   if(!lastW || !lastH) return draw();
   const c = s2w(lastW/2, lastH/2);

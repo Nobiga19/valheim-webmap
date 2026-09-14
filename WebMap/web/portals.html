@@ -22,7 +22,6 @@
   a:hover{text-decoration:underline}
 
   /* ---------- atlas ---------- */
-  .wrap{max-width:1180px;margin:0 auto;padding:1.4rem .9rem 3rem}
   h1{font-size:1.1rem;text-transform:uppercase;letter-spacing:.06em;color:var(--gold)}
   .sub{color:var(--muted);font-size:.8rem;margin-top:.25rem}
   .sub b{color:var(--ink);font-weight:600}
@@ -51,9 +50,7 @@
   /* ---------- the diagram ---------- */
   /* Screen-space canvas, HTML nodes placed by left/top: nothing crisp ever sits
      under a CSS transform, which is the map's own rule. */
-  .stage{position:relative;margin-top:.9rem;height:clamp(480px,70vh,900px);
-    border:1px solid var(--line);border-radius:.7rem;overflow:hidden;background:#05070a;
-    cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+  .stage{background:#05070a;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
   .stage.drag{cursor:grabbing}
   #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
   .net{position:absolute;inset:0;pointer-events:none}
@@ -126,7 +123,6 @@
   /* a phone's whole diagram is 3 km across: a panel that stays desktop-wide would
      swallow the places nearest the hub */
   @media (max-width:560px){
-    .stage{height:clamp(460px,64vh,620px)}
     .panel{max-width:150px;padding:.35rem .4rem .4rem}
     .panel .ttl a{font-size:.78rem}
     .chip{font-size:.66rem;padding:.2rem .32rem}
@@ -139,15 +135,23 @@
 <svg id="icons" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
 <script>MapCore.injectSprite(document.getElementById("icons"));</script>
 
-<nav class="nav" data-page="portals"></nav>
+<nav class="nav" data-page="portals" data-side></nav>
 <script>MapCore.nav();</script>
 
-<main class="wrap">
-  <h1>Portals</h1>
-  <p class="sub" id="count">reading the world&#8230;</p>
-  <p class="note" id="note"></p>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <button class="sideclose" type="button" aria-label="Close">&times;</button>
+    <h1>Portals</h1>
+    <p class="sub" id="count">reading the world&#8230;</p>
+    <p class="note" id="note"></p>
+    <p class="key"><span class="k"></span> a standing link &#183; <span class="k dash"></span> one retag away
+      &#183; drag to pan, scroll or pinch to zoom</p>
+    <div class="list" id="list"></div>
+    <p class="foot"><span id="stamp"></span> &#183; a node opens the map on that portal<span class="credits"> &#183;
+      <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
+  </aside>
 
-  <!-- the rows below say all of this in text: to a screen reader the diagram is
+  <!-- the rows beside it say all of this in text: to a screen reader the diagram is
        decoration, so nothing in it is reachable by tab -->
   <div class="stage" id="stage" aria-hidden="true">
     <canvas id="cv"></canvas>
@@ -156,13 +160,7 @@
     <div class="mapui"><button id="fitBtn" type="button" tabindex="-1" title="Fit every portal">&#8962;</button></div>
     <div class="sbar"><span class="sline" id="scaleBar"></span><span id="scaleTxt"></span></div>
   </div>
-  <p class="key"><span class="k"></span> a standing link &#183; <span class="k dash"></span> one retag away
-    &#183; drag to pan, scroll to zoom</p>
-
-  <div class="list" id="list"></div>
-  <p class="foot"><span id="stamp"></span> &#183; a node opens the map on that portal<span class="credits"> &#183;
-    <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
-</main>
+</div>
 
 <script>
 const API = MapCore.cfg.api;
@@ -433,7 +431,7 @@ function zoomAt(cx, cy, f){
 function fitAll(){
   computeFit();
   const W = stage.clientWidth, H = stage.clientHeight;
-  if(!BBOX){ scale = fit; tx = (W - GEOM.size*scale)/2; ty = (H - GEOM.size*scale)/2; return draw(); }
+  if(!BBOX){ scale = fit; tx = (W - GEOM.size*scale)/2; ty = (H - GEOM.size*scale)/2; return seenW = stage.clientWidth; seenH = stage.clientHeight; draw(); }
   const m = Math.min(84, W*0.12, H*0.12);
   const bw = Math.max(BBOX.x1-BBOX.x0, 6), bh = Math.max(BBOX.y1-BBOX.y0, 6);
   scale = clamp(Math.min((W-2*m)/bw, (H-2*m)/bh), fit*0.4, ZMAX);
@@ -487,7 +485,14 @@ stage.addEventListener("wheel", e => {
 stage.addEventListener("pointermove", e => { if(!pts.size) setHover(keysOf(e.target)); });
 stage.addEventListener("pointerleave", () => setHover([]));
 document.getElementById("fitBtn").onclick = fitAll;
-addEventListener("resize", () => { if(NODES.length) measure(); computeFit(); draw(); });
+// a folded sidebar widens the stage: what was in the middle stays in the middle
+let seenW = 0, seenH = 0;
+addEventListener("resize", () => {
+  const W = stage.clientWidth, H = stage.clientHeight;
+  if(seenW && seenH){ tx += (W - seenW)/2; ty += (H - seenH)/2; }
+  seenW = W; seenH = H;
+  if(NODES.length) measure(); computeFit(); draw();
+});
 
 const keysOf = el => { const t = el && el.closest && el.closest("[data-s]"); return t ? t.dataset.s.split(" ").filter(Boolean) : []; };
 // one spoke lit, and both the places it joins

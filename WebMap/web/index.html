@@ -21,9 +21,6 @@
   a:hover{text-decoration:underline}
 
   /* ---------- app shell ---------- */
-  .app{display:flex;height:calc(100dvh - var(--nav));position:relative}
-  .sidebar{width:var(--side);flex:0 0 var(--side);background:#12150f;border-right:1px solid var(--line);
-    overflow-y:auto;padding:1rem}
   .statusrow{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap;margin-bottom:1rem}
   .status{display:block;width:100%;background:var(--card);border:1px solid var(--line);
     border-radius:.5rem;padding:.5rem .6rem;color:var(--ink);text-decoration:none}
@@ -144,7 +141,7 @@
   .gcard canvas{width:56px;height:56px;border-radius:.4rem;border:2px solid transparent;background:#000}
   .gcard:hover,.gcard.on{color:var(--ink)}
   .gcard.on canvas{border-color:var(--gold)}
-  .presets{display:flex;gap:.35rem;flex-wrap:wrap}
+  .presets{display:flex;gap:.35rem;flex-wrap:wrap;min-width:0}   /* wraps on a phone, never spills */
   .chip{padding:.2rem .6rem;border-radius:1rem;border:1px solid var(--line);background:rgba(255,255,255,.03);
     color:var(--muted);cursor:pointer;font-size:.68rem}
   .chip:hover{color:var(--ink);border-color:var(--gold)}
@@ -175,9 +172,22 @@
   .pintypes span{color:#fff;display:flex;align-items:center;gap:.3rem}
   .pintypes svg{width:17px;height:17px;overflow:visible;flex:0 0 auto}
   .types b{color:var(--ink);font-weight:600}
+  /* Phones: the map is the page. The sidebar becomes a drawer behind a button,
+     the online line a pill at the top, and the layers tray opens upward. */
+  #mini{display:none}
   @media (max-width:760px){
-    .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:20;box-shadow:0 0 30px rgba(0,0,0,.6)}
-    .layers{left:auto;right:3.6rem;flex-direction:row-reverse}
+    .mapctl button{width:40px;height:40px}
+    #mini{display:flex;position:absolute;left:.7rem;top:.7rem;z-index:10;align-items:center;gap:.4rem;
+      max-width:calc(100% - 4.5rem);padding:.35rem .65rem;border:1px solid var(--line);border-radius:1rem;
+      background:rgba(18,21,15,.92);color:var(--ink);font-size:.76rem;cursor:pointer;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis}
+    #mini .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--unknown);flex:0 0 auto}
+    #mini.on .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+    #mini b{color:var(--ok);font-weight:600}
+    .layers{flex-direction:column-reverse;align-items:flex-start}
+    .tray{max-width:calc(100vw - 1.4rem)}
+    .lcard,.lcard canvas{width:56px;height:56px}
+    .lcard{width:60px;height:60px}
   }
 </style>
 </head>
@@ -187,11 +197,12 @@
 <svg id="icons" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
 <script>MapCore.injectSprite(document.getElementById("icons"));</script>
 
-<nav class="nav" data-page="index"></nav>
+<nav class="nav" data-page="index" data-side></nav>
 <script>MapCore.nav();</script>
 
 <div class="app">
   <aside class="sidebar" id="sidebar">
+    <button class="sideclose" id="sideClose" aria-label="Close">&times;</button>
     <div class="statusrow">
       <a class="status" id="status" target="_blank" rel="noopener">
         <span class="shead"><span class="dot" id="sdot"></span><b id="stext">checking…</b></span>
@@ -227,6 +238,7 @@
     <canvas id="mapCanvas" aria-label="Valheim world map"></canvas>
     <svg id="portalLinks" preserveAspectRatio="none" aria-hidden="true"></svg>
     <div class="markers" id="markers"></div>
+    <button id="mini" title="Details &amp; legend"><span class="dot"></span><span id="miniText">…</span></button>
     <div class="layers" id="layers">
       <button class="lcard" id="lcard" title="Switch ground (L)"><canvas id="lthumb"></canvas><span class="lbl">Layers</span></button>
       <div class="tray">
@@ -314,6 +326,7 @@ function apply(){
   document.getElementById("portalLinks").setAttribute("viewBox",
     `${(-tx/scale).toFixed(3)} ${(-ty/scale).toFixed(3)} ${(stage.clientWidth/scale).toFixed(3)} ${(stage.clientHeight/scale).toFixed(3)}`);
   positionMarkers();
+  seenW = stage.clientWidth; seenH = stage.clientHeight;
 }
 function positionMarkers(){
   document.querySelectorAll("#markers .marker").forEach(el => {
@@ -412,7 +425,7 @@ try{ const saved = localStorage.getItem("xnv.hidden");
      if(saved !== null){ HIDDEN.clear(); JSON.parse(saved).forEach(k=>HIDDEN.add(k)); } }catch(e){}
 // A preset is a whole legend at once. Its chip lights while the legend matches it exactly.
 const PRESETS = [
-  ["Everything", []],
+  ["Default",    ["portal", "grave"]],
   ["Travel",     ["forest", "plan", "grave"]],
   ["Builds",     ["vehicles", "portal", "grave", "trader", "pin"]],
   ["Wilds",      ["builds", "plan", "vehicles", "portal"]],
@@ -560,7 +573,7 @@ let last = null, pinch = null;
 stage.addEventListener("pointerdown", e => {
   // Don't start a drag on the controls: capturing the pointer here retargets
   // the pointerup to the stage, so the button never receives its click.
-  if (e.target.closest && e.target.closest(".mapui, .layers")) return;
+  if (e.target.closest && e.target.closest(".mapui, .layers, #mini")) return;
   stage.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
   if(pts.size === 1){ last = {x:e.clientX, y:e.clientY}; stage.classList.add("dragging"); }
@@ -593,6 +606,7 @@ function pinchState(){
   return {dist: Math.hypot(a.x-b.x, a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2};
 }
 
+document.getElementById("mini").onclick = () => MapCore.toggleSide(true);   // the phone's drawer
 document.getElementById("zoomIn").onclick  = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1.35);
 document.getElementById("zoomOut").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1/1.35);
 document.getElementById("zoomFit").onclick = fitExplored;
@@ -601,7 +615,13 @@ document.getElementById("fsBtn").onclick = () => {
   else (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
 };
 document.addEventListener("fullscreenchange", () => setTimeout(fitExplored, 60));
-addEventListener("resize", () => { computeFit(); apply(); });
+// a folded sidebar widens the stage: what was in the middle stays in the middle
+let seenW = 0, seenH = 0;
+addEventListener("resize", () => {
+  const W = stage.clientWidth, H = stage.clientHeight;
+  if(seenW && seenH){ tx += (W - seenW)/2; ty += (H - seenH)/2; }
+  computeFit(); apply();
+});
 
 // ---------- help modal ----------
 const helpEl = document.getElementById("help");
@@ -628,7 +648,7 @@ let GRAVES = [];          // tombstones still standing, i.e. gear still out ther
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14d";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-14f";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -689,6 +709,9 @@ function renderTiles(){
   if(list.length && hiddenCount === list.length)
     line += `<br><span style="font-size:.7rem">not shown on map \u2014 enable \u201cvisible to other players\u201d on the in-game map (M)</span>`;
   document.getElementById("online").innerHTML = line;
+  document.getElementById("mini").classList.toggle("on", list.length > 0);
+  document.getElementById("miniText").innerHTML = list.length
+    ? `<b>${list.length} online</b> · ${esc(list.map(p=>p.name).join(", "))}` : "nobody online";
   buildMarkers(list.filter(p=>p.x!=null && p.z!=null).map(p=>({name:p.name, ...toPx(p.x,p.z)})),
                PINS, VEHICLES);
 }

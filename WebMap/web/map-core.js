@@ -367,25 +367,52 @@ function credits(){
     for(const a of el.querySelectorAll("a.repo")) a.href = cfg.repo;
   }
 }
-// current defaults to the nav element's data-page
+// The sidebar, folded or not, is one choice for the whole site, kept in this
+// browser; a phone ignores it and starts with its drawer shut. A toggle fires
+// resize so a stage that fills the rest re-measures itself.
+const PHONE = typeof matchMedia === "function" ? matchMedia("(max-width:760px)") : {matches: false};
+let sideOpen = true;
+function applySide(){
+  try{ sideOpen = PHONE.matches ? false : localStorage.getItem("xnv.side") !== "closed"; }
+  catch(e){ sideOpen = !PHONE.matches; }
+  document.body.classList.toggle("side-open", sideOpen);
+}
+function toggleSide(on){
+  sideOpen = on === undefined ? !sideOpen : !!on;
+  document.body.classList.toggle("side-open", sideOpen);
+  if(!PHONE.matches){ try{ localStorage.setItem("xnv.side", sideOpen ? "open" : "closed"); }catch(e){} }
+  dispatchEvent(new Event("resize"));
+}
+if(typeof document !== "undefined"){
+  if(PHONE.addEventListener) PHONE.addEventListener("change", () => { applySide(); dispatchEvent(new Event("resize")); });
+  // the drawer's own ×, and a touch on the stage beside it
+  document.addEventListener("click", e => { if(e.target.closest(".sideclose")) toggleSide(false); });
+  document.addEventListener("pointerdown", e => {
+    if(PHONE.matches && sideOpen && !e.target.closest(".sidebar, .nav")) toggleSide(false);
+  });
+}
+// current defaults to the nav element's data-page; a nav with data-side gets the ☰
 function nav(current, el){
   el = el || document.querySelector("nav.nav");
   if(!el) return null;
   current = current || el.dataset.page || "";
   navEl = el; navPage = current;
+  const side = el.hasAttribute("data-side");
   const mark = p => p === current ? ' class="here" aria-current="page"' : "";
-  el.innerHTML = '<span class="brand">' + esc(brand()) + '</span><div class="navlinks">'
+  el.innerHTML = (side ? '<button class="sidebtn" type="button" title="Show or hide the sidebar" aria-label="Sidebar">&#9776;</button>' : "")
+    + '<span class="brand">' + esc(brand()) + '</span><div class="navlinks">'
     + NAV_PAGES.map(([p, label]) => `<a${mark(p)} href="${p}.html">${label}</a>`).join("")
     + '<span class="ext">'
     + cfg.links.map(l => `<a href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")
     + '</span></div>';
+  if(side){ el.querySelector(".sidebtn").addEventListener("click", () => toggleSide()); applySide(); }
   setTitle(current);
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", credits, {once: true});
   else credits();
   return el;
 }
 
-return {cfg, brand, setTitle, credits,
+return {cfg, brand, setTitle, credits, toggleSide,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
         drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces,

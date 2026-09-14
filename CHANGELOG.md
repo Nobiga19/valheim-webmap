@@ -4,8 +4,15 @@
 
 * A Layers card on the map, as on Google Maps: a thumbnail of the other ground in the
   corner, and behind it the choice of ground -- the world render, or the flat biome
-  atlas the portals page draws on -- and presets of the legend (Everything, Travel,
-  Builds, Wilds, Bare). `L` cycles the ground. Graves are off by default, like portals.
+  atlas the portals page draws on, which carries no forest shading -- and presets of
+  the legend (Default, Travel, Builds, Wilds, Bare). `L` cycles the ground. Graves are
+  off by default, like portals.
+* One sidebar shell for the map, the portals and the plan: the ☰ in the bar folds it
+  away, and the choice holds across pages. The portals page now draws its diagram
+  full-height with the hub and pair lists beside it instead of a boxed chart above them.
+* Phones: the sidebar is a drawer, shut on arrival, opened by the ☰ or by the online
+  pill on the map; the layers tray opens upward; the bar fades at its edge where it
+  swipes.
 
 ## 2.11.0
 
