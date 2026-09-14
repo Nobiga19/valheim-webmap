@@ -330,7 +330,6 @@ ASALocalRun/
 
 notes.txt
 ValheimWebMap.zip
-*/web/main.js
 libs/valheim
 libs/BepInEx
 WebMap.dll

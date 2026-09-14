@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.11.0
+
+* The bundled viewer is now the same site that fronts our own server: the live map with
+  builds drawn as shaded roofs and floor plans, the portal atlas on a biome chart, the
+  planning board, and the players page — served by the mod on its own port, so it needs
+  no proxy and no hosting. The old viewer, its webpack build and the websocket pings it
+  showed are gone; the pages poll `/state` instead.
+* Pages are served with `no-cache` so a new build shows on the next visit; assets for
+  five minutes. They were cached for a week.
+
 ## 2.10.0
 
 * `render_size`: the world render at its own resolution. 4096 halves the metres per pixel

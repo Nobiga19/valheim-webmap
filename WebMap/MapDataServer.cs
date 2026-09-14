@@ -374,7 +374,8 @@ namespace WebMap
 
                 if (requestedFileBytes.Length > 0)
                 {
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
+                    // a page must pick up a new build on the next visit; its assets can wait a bit
+                    res.Headers.Add(HttpResponseHeader.CacheControl, fileExt == "html" ? "no-cache" : "public, max-age=300");
                     res.ContentType = contentTypes[fileExt];
                     res.StatusCode = 200;
                     res.ContentLength64 = requestedFileBytes.Length;

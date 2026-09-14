@@ -39,8 +39,10 @@ After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 
 ## Using the map
 
-The structures and forest layers are drawn by default; the menu (top-left) has a toggle
-for each, alongside the pin filters.
+The viewer at `http://your_ip:port` is four pages — the live map, a portal atlas drawn on
+a biome chart, a planning board for drawing and sharing routes, and per-player tallies —
+with a Layers list on the map to switch each layer off. Its source is `WebMap/web`; our own hosted copy at
+[xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
 Players only appear once they set **visible to other players** on the in-game map (`m`).
 
@@ -145,6 +147,7 @@ MIT where applicable.
 * Background by [webtreats], [CC BY 2.0]
 
 [h0tw1r3/valheim-webmap]: https://github.com/h0tw1r3/valheim-webmap
+[xn-valheim]: https://github.com/hunter-jsb/xn-valheim
 [BepInEx]: https://github.com/BepInEx/BepInEx
 [indifferentbroccoli/valheim-server-docker]: https://github.com/indifferentbroccoli/valheim-server-docker
 [webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254
