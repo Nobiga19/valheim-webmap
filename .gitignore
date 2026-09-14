@@ -343,3 +343,6 @@ announce.token
 
 # thunderstore service account token, local only
 .env
+
+# the viewer check scripts are ours, not a build output
+!tools/

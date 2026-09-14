@@ -118,6 +118,14 @@ yields is the smallest safe step.
 message on a `RelationsManager` permission check against the sender's platform user id,
 which a server does not have, so chat sent from a server is dropped in silence.
 
+### Checking the viewer against a live server
+
+`tools/sameorigin.py WebMap/web http://your_ip:port 8765` serves the viewer the way the
+mod does -- the pages from disk, every other path forwarded to the server -- and
+`tools/shoot.mjs http://127.0.0.1:8765 /tmp/out 9333 / /portals.html /plan.html /players.html`
+drives a headless Chrome over it and prints what each page drew, which hosts it talked
+to, and any exception. A viewer change is done when that is clean.
+
 ### Local test server
 
 `./testserver.sh` runs the same image the hosts do
