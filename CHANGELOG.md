@@ -13,6 +13,11 @@
 * Phones: the sidebar is a drawer, shut on arrival, opened by the ☰ or by the online
   pill on the map; the layers tray opens upward; the bar fades at its edge where it
   swipes.
+* One style system in `site.css`: the tokens (surfaces, ink, accents, radii, shadows),
+  the base, and the pieces every page shares -- cards, stats, buttons, chips, fields,
+  the legend, the map's button column, section rules. The pages' own styles shrank
+  to what each alone draws. The bar underlines the page you are on, controls ease
+  between states, focus is visible, and scrollbars are thin everywhere.
 
 ## 2.11.0
 

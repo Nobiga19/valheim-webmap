@@ -12,52 +12,27 @@
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
 <style>
-  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-  html{background:var(--bg)}
-  body{background:var(--bg);color:var(--ink);min-height:100%;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased;line-height:1.5}
-  a{color:var(--gold);text-decoration:none}
-  a:hover{text-decoration:underline}
+  body{min-height:100%}
 
   /* ---------- roster ---------- */
   .wrap{max-width:900px;margin:0 auto;padding:1.4rem .9rem 3rem}
-  h1{font-size:1.1rem;text-transform:uppercase;letter-spacing:.06em;color:var(--gold)}
-  .sub{color:var(--muted);font-size:.8rem;margin-top:.25rem}
-  .sub b{color:var(--ink);font-weight:600}
-  .note{color:var(--off);font-size:.76rem;margin-top:.35rem}
-  .note:empty{display:none}
-
   .sorts{display:flex;flex-wrap:wrap;gap:.4rem;margin:1.1rem 0 .9rem;align-items:center}
-  .sorts .lb{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-right:.1rem}
-  .sorts button{font-family:inherit;font-size:.74rem;color:var(--muted);cursor:pointer;
-    background:var(--card);border:1px solid var(--line);border-radius:.4rem;padding:.28rem .6rem}
-  .sorts button:hover{color:var(--ink);border-color:var(--gold)}
-  .sorts button.on{color:var(--gold);border-color:var(--gold)}
-
+  .sorts .lb{margin-right:.1rem}
   .cards{display:grid;gap:.6rem;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:.75rem .85rem}
-  .card.on{border-color:#2f4b2e}
   .chead{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
-  .chead .dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--unknown);flex:0 0 auto}
-  .card.on .chead .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
-  .chead .nm{font-size:.95rem;font-weight:700;color:#fff;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card.on .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .chead .nm{font-size:.95rem;font-weight:700;color:var(--bright);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .chead .seen{margin-left:auto;font-size:.72rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
   .card.on .chead .seen{color:var(--ok)}
-
   /* ten figures have to stay readable on a 400px phone: four to a row there, more when there is room */
   .figs{margin-top:.7rem;display:grid;gap:.5rem .4rem;grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}
-  .fig .v{font-size:1.02rem;font-weight:700;color:#fff;line-height:1.2;font-variant-numeric:tabular-nums}
-  .fig .k{font-size:.61rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);line-height:1.25}
+  .figs .v{font-size:1.02rem;margin-top:0}
+  .figs .k{font-size:.61rem;letter-spacing:.05em;line-height:1.25}
   .fig.nil .v{color:#565b53;font-weight:600}
   .fig.warn .v,.fig.warn .k{color:var(--gold)}
-
-  .empty{color:var(--muted);font-size:.82rem;padding:.9rem 0}
-  .how{margin-top:1.8rem;border-top:1px solid var(--line);padding-top:.9rem}
-  .how h2{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
   .how ul{list-style:none;margin-top:.5rem;display:grid;gap:.22rem;font-size:.73rem;color:var(--muted)}
-  .how b{color:#c2bcab;font-weight:600}
-  .foot{color:var(--muted);font-size:.72rem;margin-top:1.2rem}
+  .how b{color:var(--ink-2);font-weight:600}
+  .foot{border-top:0;padding-top:0;margin-top:1.2rem}
 </style>
 </head>
 <body>
@@ -66,22 +41,22 @@
 <script>MapCore.nav();</script>
 
 <main class="wrap">
-  <h1>Players</h1>
+  <h1 class="title">Players</h1>
   <p class="sub" id="count">counting…</p>
-  <p class="note" id="note"></p>
+  <p class="note bad" id="note"></p>
 
   <div class="sorts" id="sorts">
-    <span class="lb">Sort</span>
-    <button class="on" data-sort="seen">last seen</button>
-    <button data-sort="deaths">deaths</button>
-    <button data-sort="dist">distance</button>
-    <button data-sort="pieces">pieces</button>
+    <span class="lb eyebrow">Sort</span>
+    <button class="chip on" data-sort="seen">last seen</button>
+    <button class="chip" data-sort="deaths">deaths</button>
+    <button class="chip" data-sort="dist">distance</button>
+    <button class="chip" data-sort="pieces">pieces</button>
   </div>
 
   <div id="list"></div>
 
-  <section class="how">
-    <h2>How these are counted</h2>
+  <section class="how section">
+    <h2 class="eyebrow">How these are counted</h2>
     <ul>
       <li><b>Deaths</b> — every time you have died in this world.</li>
       <li><b>Joins</b> — sessions started, one per connection to the server.</li>
@@ -123,7 +98,7 @@ function ago(secs){
 function seen(t){ return t ? "last seen " + ago(t) : "not seen since the tally began"; }
 
 function fig(v, k, cls){
-  return `<div class="fig${cls ? " " + cls : ""}"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+  return `<div class="stat fig${cls ? " " + cls : ""}"><div class="v">${v}</div><div class="k">${k}</div></div>`;
 }
 
 function card(p){

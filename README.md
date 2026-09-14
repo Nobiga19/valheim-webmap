@@ -44,7 +44,9 @@ a biome chart, a planning board for drawing and sharing routes, and per-player t
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
-holds across pages. Its source is `WebMap/web`; our own hosted copy at
+holds across pages. Its source is `WebMap/web`: `site.css` is the style system every
+page draws from, `map-core.js` the rendering core, and each page holds only its own.
+Our own hosted copy at
 [xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
 Players only appear once they set **visible to other players** on the in-game map (`m`).
