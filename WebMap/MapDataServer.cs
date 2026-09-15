@@ -172,7 +172,7 @@ namespace WebMap
         // Reads that the world sweep exists to serve. Anything a monitor probes
         // (/config, /players, /map, /pins, /messages) must not keep it running.
         private static readonly HashSet<string> sweepReads = new HashSet<string> {
-            "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces",
+            "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces", "/trails",
             "/forest/stats", "/structures/stats", "/state"
         };
         private readonly string publicRoot;
@@ -507,6 +507,15 @@ namespace WebMap
                     res.ContentLength64 = forestBytes.Length;
                     res.Close(forestBytes, true);
                     return true;
+                case "/trails":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "image/png";
+                    res.StatusCode = 200;
+                    byte[] trailBytes = Trails.GetPng();
+                    if (trailBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // nothing walked yet, or not rendered
+                    res.ContentLength64 = trailBytes.Length;
+                    res.Close(trailBytes, true);
+                    return true;
                 case "/forest/stats":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
@@ -562,10 +571,10 @@ namespace WebMap
                         }
                         string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                             + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
-                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + "}"
+                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev + "}"
                             + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
                             + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
-                            + ",\"traders\":" + Traders.Json()
+                            + ",\"traders\":" + Traders.Json() + ",\"deaths\":" + Stats.DeathsJson()
                             + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats()
                             + ",\"stats\":" + Stats.Json(PinsByName()) + "}";
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
@@ -658,8 +667,10 @@ namespace WebMap
                     long pid = 0L;
                     try { pid = z.GetLong(ZDOVars.s_playerID, 0L); } catch { }
                     Stats.Seen(player.m_playerName, pid, z.GetPosition());
+                    Trails.Mark(pid != 0L ? pid : player.m_playerName.GetHashCode(), z.GetPosition());
                 }
                 Stats.MaybeSave();
+                Trails.MaybeSave();
             }
             catch (Exception ex)
             {

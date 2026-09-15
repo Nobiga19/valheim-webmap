@@ -194,6 +194,8 @@
         <div class="trow"><span class="tk eyebrow">Show</span><div class="presets" id="presets"></div></div>
         <div class="trow"><span class="tk eyebrow">Details</span><div class="presets" id="details">
           <button class="chip" data-detail="fires" title="Torches, fire pits and hearths; a grey ring has burnt out">Torches &amp; fires</button>
+          <button class="chip" data-detail="deaths" title="Where people died, fading over a month">Deaths</button>
+          <button class="chip" data-detail="trails" title="Where people have walked">Trails</button>
         </div></div>
       </div>
     </div>
@@ -233,8 +235,8 @@
 
     <h3>Layers</h3>
     <p>Each row of the sidebar's <b>Legend</b> is a switch, remembered by this browser; the
-       <b>Layers</b> card on the map holds presets of them, details such as torches and
-       fires, and swaps the ground between the terrain render and a flat atlas of biomes
+       <b>Layers</b> card on the map holds presets of them, details (torches and fires,
+       deaths, trails), and swaps the ground between the terrain render and a flat atlas of biomes
        (<b>L</b> cycles). Zoomed right in, builds
        turn from roofs into a floor plan; hide <b>floor plan when close</b> to keep the
        roofs. Portal lines join linked pairs, and a grave is gear still lying there.</p>
@@ -266,10 +268,11 @@ function drawRaster(){
   const v = {scale, tx, ty, w:W, h:H};
   MapCore.drawRasters(rctx, v, LAYERS.imgs,
     {bg:"#000", ground:GROUND, forest:!HIDDEN.has("forest") && GROUND !== "atlas",
-     structures:!HIDDEN.has("builds") && !PIECES});
+     structures:!HIDDEN.has("builds") && !PIECES, trails:DETAILS.has("trails")});
   if(PIECES && !HIDDEN.has("builds"))
     MapCore.drawPieces(rctx, v, PIECES, {plan: scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
   if(PIECES && DETAILS.has("fires")) MapCore.drawFires(rctx, v, PIECES);
+  if(DETAILS.has("deaths")) MapCore.drawDeaths(rctx, v, DEATHS);
 }
 function apply(){
   drawRaster();
@@ -414,6 +417,8 @@ document.getElementById("details").addEventListener("click", e => {
   const k = el.dataset.detail;
   DETAILS.has(k) ? DETAILS.delete(k) : DETAILS.add(k);
   markDetails(); drawRaster();
+  // the trails raster is fetched only once asked for
+  if(k === "trails" && DETAILS.has(k) && LAST_REV) LAYERS.sync(LAST_REV, {trails: true});
 });
 markDetails();
 // The ground: the world render, or the server's flat chart of biomes that the atlas
@@ -611,9 +616,11 @@ let VEHICLES = null;      // boats and carts, refreshed on the slow tick; null =
 let PORTALS = [];         // portals and the links between connected pairs
 let GRAVES = [];          // tombstones still standing, i.e. gear still out there
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
+let DEATHS = [];          // where people died, newest last
+let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14g";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-14h";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -706,12 +713,15 @@ async function tickState(){
   PORTALS = ((s.portals||{}).portals||[]).map(p=>({id:p.id, name:p.name, to:p.to, ...toPx(p.x,p.z)}));
   GRAVES = ((s.graves||{}).graves||[]).map(g=>({name:g.name, age:g.age, ...toPx(g.x,g.z)}));
   TRADERS = ((s.traders||{}).traders||[]).map(t=>({name:t.name, ...toPx(t.x,t.z)}));
+  DEATHS = ((s.deaths||{}).deaths||[]).map(d=>({name:d.n, t:d.t, ...toPx(d.x,d.z)}));
+  LAST_REV = s.rev;
   PINS = MapCore.parsePins(s.pins);
   if(s.forest) FOREST = s.forest;
   renderTiles();
   if(s.messages) renderFeed(s.messages);
   await LAYERS.sync(s.rev, {
     chart: true,                    // the atlas ground, and the card's thumbnail of it
+    trails: () => DETAILS.has("trails"),
     pieces: setPieces,
     structures: () => !PIECES,      // the raster only stands in until the footprints land
     onFog: () => setTimeout(()=>fitExplored(false), 60),

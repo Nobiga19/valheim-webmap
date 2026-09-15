@@ -126,6 +126,7 @@ namespace WebMap
             worldDataPath = Path.Combine(mapDataPath, WebMapConfig.GetWorldName());
             Directory.CreateDirectory(worldDataPath);
             Stats.Load(worldDataPath);
+            Trails.Load(worldDataPath);
             Chart.Load(worldDataPath);
 
             if (mapDataServer == null)
@@ -540,6 +541,7 @@ namespace WebMap
             private static void Postfix()
             {
                 Stats.Save();
+                Trails.Save();
                 mapDataServer.Stop();
                 WebMap.instance.NotifyOffline();
             }

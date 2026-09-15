@@ -237,6 +237,7 @@ namespace WebMap
                 var bytes = ImageConv.EncodeRgbaToPNG(rgba, size, size);
                 png = bytes; Rev = Fnv.Of(bytes);
                 ForestMap.Finish();
+                Trails.Finish();
                 Vehicles.Finish();
                 Portals.Finish();
                 Pieces.Finish();

@@ -71,7 +71,7 @@ async function fetchConfig(base){ return setGeom(await fetchJSON(base, "/config"
 const BASE_TEX = cfg.base;              // the world render, versioned by hand
 function layers(base, onLoad){
   const imgs = {}, rev = {};
-  for(const k of ["base", "forest", "struct", "fog", "chart"]){
+  for(const k of ["base", "forest", "struct", "fog", "chart", "trails"]){
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.addEventListener("load", () => { if(onLoad) onLoad(k); });
@@ -105,6 +105,9 @@ function layers(base, onLoad){
     if(wantStruct && r.structures !== rev.structures){ rev.structures = r.structures; load("struct", "/structures", r.structures); }
     if(r.fog !== rev.fog){ rev.fog = r.fog; load("fog", "/fog", r.fog, o.onFog); }
     if(o.chart && r.chart && r.chart !== rev.chart){ rev.chart = r.chart; load("chart", "/chart", r.chart); }
+    // the trails come only when asked for, like the structures raster
+    const wantTrails = typeof o.trails === "function" ? o.trails() : o.trails;
+    if(wantTrails && r.trails && r.trails !== rev.trails){ rev.trails = r.trails; load("trails", "/trails", r.trails); }
   }
   return {imgs, rev, ready, load, whenReady, sync,
           loadBase: () => load("base", BASE_TEX, "4k")};
@@ -114,7 +117,7 @@ function layers(base, onLoad){
 // One blit per layer, of the visible window only: base, forest twice, the
 // structures raster while the pieces are absent, fog last. Nearest-neighbour for
 // the base once a texture pixel is bigger than a screen pixel.
-// v: {scale, tx, ty, w, h, pix?}   o: {bg, forest, structures, fogReady, ground}
+// v: {scale, tx, ty, w, h, pix?}   o: {bg, forest, structures, fogReady, ground, trails}
 // ground: "terrain" (the render) or "atlas" (the server's flat biome chart, when it has come)
 function drawRasters(g, v, imgs, o){
   o = o || {};
@@ -144,6 +147,7 @@ function drawRasters(g, v, imgs, o){
     if(o.forest){ blit(imgs.forest, true, "multiply"); blit(imgs.forest, true, "multiply"); }
     if(o.structures) blit(imgs.struct, true, "source-over");
     blit(imgs.fog, true, "multiply");                // unexplored ground stays dark
+    if(o.trails) blit(imgs.trails, true, "source-over");   // walked ground only, so it sits over the fog
   }
   g.globalCompositeOperation = "source-over";
   g.imageSmoothingEnabled = true;
@@ -256,10 +260,23 @@ function drawPieces(g, v, pieces, o){
   g.globalAlpha = 1;
 }
 
-// ---------- fires ----------
-// Torches, fire pits and hearths as warm points over the map, merging into one
-// glow where a base is kept; one that has burnt out is a grey ring. The glow
-// grows with the zoom but stays a point: it marks a place, it does not light it.
+// ---------- glows ----------
+// A soft point of light at a place: the glow grows with the zoom but stays a
+// point, marking the spot rather than lighting it. Drawn additively, so a
+// cluster merges into one brighter glow.
+function glow(g, x, y, r, c){
+  const grad = g.createRadialGradient(x, y, 0, x, y, r);
+  grad.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},.95)`);
+  grad.addColorStop(.35, `rgba(${c[3]},${c[4]},${c[5]},.55)`);
+  grad.addColorStop(1, `rgba(${c[3]},${c[4]},${c[5]},0)`);
+  g.globalCompositeOperation = "lighter";
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fill();
+  g.globalCompositeOperation = "source-over";
+}
+const EMBER = [255, 196, 96, 255, 140, 40], BLOOD = [255, 120, 120, 200, 40, 40];
+// Torches, fire pits and hearths: warm points, merging into one glow where a
+// base is kept; one that has burnt out is a grey ring.
 function drawFires(g, v, pieces){
   if(!pieces || !pieces.length) return;
   const pix = v.pix || 1, r = Math.min(14, Math.max(3.5, v.scale*1.1));
@@ -270,22 +287,32 @@ function drawFires(g, v, pieces){
     const x = v.tx + p.px*v.scale, y = v.ty + p.py*v.scale;
     if(x < -r || y < -r || x > v.w + r || y > v.h + r) continue;
     if(p.fire){
-      const grad = g.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, "rgba(255,196,96,.95)");
-      grad.addColorStop(.35, "rgba(255,150,40,.55)");
-      grad.addColorStop(1, "rgba(255,120,20,0)");
-      g.globalCompositeOperation = "lighter";
-      g.fillStyle = grad;
-      g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fill();
-      g.globalCompositeOperation = "source-over";
+      glow(g, x, y, r, EMBER);
       g.fillStyle = "#fff1c4";
       g.beginPath(); g.arc(x, y, Math.max(1, r*.18), 0, Math.PI*2); g.fill();
     }else{
-      g.globalCompositeOperation = "source-over";
       g.strokeStyle = "rgba(210,210,200,.7)"; g.lineWidth = 1;
       g.beginPath(); g.arc(x, y, Math.max(2, r*.35), 0, Math.PI*2); g.stroke();
     }
   }
+  g.restore();
+}
+// Where people died: a red glow each, fading with age over a month, so the
+// places that keep killing burn brightest. deaths: [{px, py, t}]
+function drawDeaths(g, v, deaths, now){
+  if(!deaths || !deaths.length) return;
+  const pix = v.pix || 1, r = Math.min(22, Math.max(5, v.scale*1.6));
+  now = now || Date.now()/1000;
+  g.save();
+  g.setTransform(pix, 0, 0, pix, 0, 0);
+  for(const d of deaths){
+    const x = v.tx + d.px*v.scale, y = v.ty + d.py*v.scale;
+    if(x < -r || y < -r || x > v.w + r || y > v.h + r) continue;
+    const age = Math.max(0, now - (d.t || now)) / 86400;
+    g.globalAlpha = age < 1 ? 1 : Math.max(.35, 1 - age/30);
+    glow(g, x, y, r, BLOOD);
+  }
+  g.globalAlpha = 1;
   g.restore();
 }
 
@@ -452,7 +479,7 @@ function nav(current, el){
 return {cfg, brand, setTitle, credits, toggleSide,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
-        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires,
+        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires, drawDeaths,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
         parsePins, ago, esc, nav};
 })();

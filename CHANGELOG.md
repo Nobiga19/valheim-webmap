@@ -18,6 +18,11 @@
   is kept -- and a burnt-out one as a grey ring. The sweep now reads each fire's fuel
   and sends it as a fifth field on those pieces; a viewer on an older server treats
   every fire as lit.
+* Deaths and trails, two more details in the Layers card. Every death is kept with
+  where it happened (`deaths` in `/state`, the last 500) and drawn as a red glow that
+  fades over a month. Trails count, per map pixel, the times a player walked into it,
+  kept in `trails.bin` beside the stats and rendered each sweep as `/trails`, a faint
+  blue over the ground; `rev.trails` in `/state` says when it moved.
 * The bundled viewer's file cache keys on each file's timestamp, so a viewer file
   replaced on disk is served at once instead of after the next restart.
 * One style system in `site.css`: the tokens (surfaces, ink, accents, radii, shadows),

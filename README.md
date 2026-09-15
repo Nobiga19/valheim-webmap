@@ -87,13 +87,14 @@ Standard BepInEx config, plus:
 | `/chart` | the world as a chart: each pixel its biome's flat colour, water one blue, no relief (PNG, once per world) |
 | `/structures`, `/structures/stats` | structures overlay; counts by prefab and the last sweep's cost |
 | `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
+| `/trails` | where players have walked: a count per map pixel, drawn as a faint blue band; 503 until the first sweep after someone walks (PNG) |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
 | `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
-| `/state` | all of the small JSON blocks in one document, plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=` |
+| `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=` |
 | `/announce` | POST, see above |
 
 The structure sweep walks every ZDO on the game thread, a few thousand per frame;

@@ -39,6 +39,12 @@ namespace WebMap
         private static readonly object gate = new object();
         private static readonly Dictionary<string, P> byName = new Dictionary<string, P>(StringComparer.Ordinal);
         private static readonly Dictionary<long, string> nameOfId = new Dictionary<long, string>();
+        // Where people died, newest last; the last snapshot's position, taken a second before
+        private struct D { public string name; public float x, z; public long t; }
+        private const int MaxDeaths = 500;
+        private static readonly List<D> deaths = new List<D>();
+        private static volatile string deathsJson = "{\"deaths\":[],\"count\":0}";
+        private static volatile bool deathsStale = true;
         private static string path;
         private static long since;
         private static bool dirty;
@@ -87,7 +93,35 @@ namespace WebMap
         public static void Death(string name)
         {
             if (string.IsNullOrEmpty(name)) return;
-            lock (gate) { var p = Get(name); p.deaths++; p.hasPos = false; Touch(p); }
+            lock (gate)
+            {
+                var p = Get(name); p.deaths++;
+                if (p.hasPos)
+                {
+                    deaths.Add(new D { name = p.name, x = p.lx, z = p.lz, t = Now() });
+                    if (deaths.Count > MaxDeaths) deaths.RemoveAt(0);
+                    deathsStale = true;
+                }
+                p.hasPos = false; Touch(p);
+            }
+        }
+
+        public static string DeathsJson()
+        {
+            if (!deathsStale) return deathsJson;
+            lock (gate)
+            {
+                var sb = new StringBuilder("{\"deaths\":[");
+                for (int i = 0; i < deaths.Count; i++)
+                {
+                    var d = deaths[i];
+                    if (i > 0) sb.Append(',');
+                    sb.Append(FormattableString.Invariant($"{{\"n\":\"{Esc(d.name)}\",\"x\":{d.x:0.#},\"z\":{d.z:0.#},\"t\":{d.t}}}"));
+                }
+                sb.Append("],\"count\":").Append(deaths.Count).Append('}');
+                deathsJson = sb.ToString(); deathsStale = false;
+                return deathsJson;
+            }
         }
 
         public static void Chat(string name)
@@ -186,7 +220,7 @@ namespace WebMap
             lock (gate)
             {
                 path = Path.Combine(worldDataPath, "stats.tsv");
-                byName.Clear(); nameOfId.Clear();
+                byName.Clear(); nameOfId.Clear(); deaths.Clear();
                 since = Now();
                 try
                 {
@@ -205,10 +239,18 @@ namespace WebMap
                             double.TryParse(f[6], NumberStyles.Float, CultureInfo.InvariantCulture, out p.dist);
                             long.TryParse(f[7], out p.lastSeen);
                         }
+                        else if (f.Length >= 5 && f[0] == "d")
+                        {
+                            var d = new D { name = f[1] };
+                            float.TryParse(f[2], NumberStyles.Float, CultureInfo.InvariantCulture, out d.x);
+                            float.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out d.z);
+                            long.TryParse(f[4], out d.t);
+                            deaths.Add(d);
+                        }
                     }
                 }
                 catch (Exception e) { ZLog.LogWarning("WebMap: stats not loaded: " + e.Message); }
-                finally { jsonStale = true; }
+                finally { jsonStale = true; deathsStale = true; }
             }
         }
 
@@ -230,6 +272,8 @@ namespace WebMap
                     foreach (var kv in nameOfId) sb.Append("id\t").Append(kv.Key).Append('\t').Append(kv.Value).Append('\n');
                     foreach (var p in byName.Values)
                         sb.Append(FormattableString.Invariant($"p\t{p.name}\t{p.joins}\t{p.deaths}\t{p.chat}\t{p.hops}\t{p.dist:0.#}\t{p.lastSeen}\n"));
+                    foreach (var d in deaths)
+                        sb.Append(FormattableString.Invariant($"d\t{d.name}\t{d.x:0.#}\t{d.z:0.#}\t{d.t}\n"));
                     File.WriteAllText(path + ".new", sb.ToString());
                     if (File.Exists(path)) File.Replace(path + ".new", path, null);   // one rename, never a gap
                     else File.Move(path + ".new", path);
