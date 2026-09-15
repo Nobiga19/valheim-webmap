@@ -87,7 +87,7 @@ Standard BepInEx config, plus:
 | `/chart` | the world as a chart: each pixel its biome's flat colour, water one blue, no relief (PNG, once per world) |
 | `/structures`, `/structures/stats` | structures overlay; counts by prefab and the last sweep's cost |
 | `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
-| `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour (JSON, about 60 KB for a world) |
+| `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |

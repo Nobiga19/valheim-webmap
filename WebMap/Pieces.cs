@@ -16,13 +16,15 @@ namespace WebMap
     // everything else sits on Valheim's 2 m build grid.
     internal static class Pieces
     {
-        private class Kind { public string name; public float w, d; public string colour; public int idx; }
-        private struct Entry { public int kind; public float x, z, yaw; }
+        private class Kind { public string name; public float w, d; public string colour; public int idx; public bool fire; }
+        private struct Entry { public int kind; public float x, z, yaw; public sbyte lit; }   // lit: -1 not a fire or unknown
 
         private static readonly Dictionary<int, Kind> kinds = new Dictionary<int, Kind>();
         private static readonly List<Kind> order = new List<Kind>();            // idx -> kind
         private static readonly List<Entry> found = new List<Entry>();
         private static readonly Regex Dims = new Regex(@"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)", RegexOptions.Compiled);
+        // the pieces that burn: their fuel says whether anyone still tends the place
+        private static readonly Regex Fire = new Regex("torch|fire_pit|bonfire|hearth|brazier|sconce|fairylight|candle|lantern", RegexOptions.Compiled);
         private static volatile string json = "{\"prefabs\":[],\"pieces\":[],\"count\":0}";
 
         private static string Inv(System.FormattableString f) => f.ToString(CultureInfo.InvariantCulture);
@@ -51,7 +53,8 @@ namespace WebMap
             else if (l.Contains("sapling"))                                         { w = 0.5f; d = 0.5f; }
             var c = StructureMap.MaterialOf(prefabHash);
             k = new Kind { name = n.Replace("\\", "").Replace("\"", ""), w = w, d = d,
-                           colour = c.r.ToString("x2") + c.g.ToString("x2") + c.b.ToString("x2"), idx = order.Count };
+                           colour = c.r.ToString("x2") + c.g.ToString("x2") + c.b.ToString("x2"), idx = order.Count,
+                           fire = Fire.IsMatch(l) };
             kinds[prefabHash] = k; order.Add(k);
             return k;
         }
@@ -63,7 +66,13 @@ namespace WebMap
             var k = KindOf(prefabHash);
             float yaw = 0f;
             try { yaw = zdo.GetRotation().eulerAngles.y; } catch { }
-            found.Add(new Entry { kind = k.idx, x = pos.x, z = pos.z, yaw = yaw });
+            sbyte lit = -1;
+            if (k.fire)
+            {
+                // Fireplace keeps its fuel in the ZDO; a torch with none has gone out
+                try { float f = zdo.GetFloat("fuel", -1f); if (f >= 0f) lit = f > 0f ? (sbyte)1 : (sbyte)0; } catch { }
+            }
+            found.Add(new Entry { kind = k.idx, x = pos.x, z = pos.z, yaw = yaw, lit = lit });
         }
 
         // Not fog-gated here: the page draws these under the fog mask, like the
@@ -83,7 +92,9 @@ namespace WebMap
             {
                 var e = found[i];
                 if (i > 0) sb.Append(',');
-                sb.Append(Inv($"[{e.kind},{e.x:0.#},{e.z:0.#},{Mathf.RoundToInt(e.yaw)}]"));
+                sb.Append(Inv($"[{e.kind},{e.x:0.#},{e.z:0.#},{Mathf.RoundToInt(e.yaw)}"));
+                if (e.lit >= 0) sb.Append(',').Append(e.lit);          // a fifth field, on the pieces that burn
+                sb.Append(']');
             }
             sb.Append("],\"count\":").Append(found.Count).Append('}');
             string s = sb.ToString();

@@ -192,6 +192,9 @@
       <div class="tray glass">
         <div class="trow"><span class="tk eyebrow">Ground</span><div class="grounds" id="grounds"></div></div>
         <div class="trow"><span class="tk eyebrow">Show</span><div class="presets" id="presets"></div></div>
+        <div class="trow"><span class="tk eyebrow">Details</span><div class="presets" id="details">
+          <button class="chip" data-detail="fires" title="Torches, fire pits and hearths; a grey ring has burnt out">Torches &amp; fires</button>
+        </div></div>
       </div>
     </div>
     <div class="mapctl">
@@ -230,8 +233,9 @@
 
     <h3>Layers</h3>
     <p>Each row of the sidebar's <b>Legend</b> is a switch, remembered by this browser; the
-       <b>Layers</b> card on the map holds presets of them and swaps the ground between the
-       terrain render and a flat atlas of biomes (<b>L</b> cycles). Zoomed right in, builds
+       <b>Layers</b> card on the map holds presets of them, details such as torches and
+       fires, and swaps the ground between the terrain render and a flat atlas of biomes
+       (<b>L</b> cycles). Zoomed right in, builds
        turn from roofs into a floor plan; hide <b>floor plan when close</b> to keep the
        roofs. Portal lines join linked pairs, and a grave is gear still lying there.</p>
 
@@ -265,6 +269,7 @@ function drawRaster(){
      structures:!HIDDEN.has("builds") && !PIECES});
   if(PIECES && !HIDDEN.has("builds"))
     MapCore.drawPieces(rctx, v, PIECES, {plan: scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
+  if(PIECES && DETAILS.has("fires")) MapCore.drawFires(rctx, v, PIECES);
 }
 function apply(){
   drawRaster();
@@ -397,6 +402,20 @@ function applyHidden(){
   markPresets();
   try{ localStorage.setItem("xnv.hidden", JSON.stringify([...HIDDEN])); }catch(e){}
 }
+// Details are extras drawn over whatever the legend shows, each its own switch.
+const DETAILS = new Set();
+try{ (JSON.parse(localStorage.getItem("xnv.details") || "[]")).forEach(k => DETAILS.add(k)); }catch(e){}
+function markDetails(){
+  document.querySelectorAll("#details .chip").forEach(el => el.classList.toggle("on", DETAILS.has(el.dataset.detail)));
+  try{ localStorage.setItem("xnv.details", JSON.stringify([...DETAILS])); }catch(e){}
+}
+document.getElementById("details").addEventListener("click", e => {
+  const el = e.target.closest(".chip"); if(!el) return;
+  const k = el.dataset.detail;
+  DETAILS.has(k) ? DETAILS.delete(k) : DETAILS.add(k);
+  markDetails(); drawRaster();
+});
+markDetails();
 // The ground: the world render, or the server's flat chart of biomes that the atlas
 // uses. Thumbnails are the explored ground itself, at a stamp's size, fog and all.
 const GROUNDS = [["terrain", "Terrain"], ["atlas", "Atlas"]];
@@ -594,7 +613,7 @@ let GRAVES = [];          // tombstones still standing, i.e. gear still out ther
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14f";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-14g";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 

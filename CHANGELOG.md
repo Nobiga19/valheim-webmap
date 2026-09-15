@@ -13,6 +13,11 @@
 * Phones: the sidebar is a drawer, shut on arrival, opened by the ☰ or by the online
   pill on the map; the layers tray opens upward; the bar fades at its edge where it
   swipes.
+* Torches and fires: a Details row in the Layers card, off by default, draws torches,
+  fire pits, hearths and braziers as warm points over the map -- one glow where a base
+  is kept -- and a burnt-out one as a grey ring. The sweep now reads each fire's fuel
+  and sends it as a fifth field on those pieces; a viewer on an older server treats
+  every fire as lit.
 * One style system in `site.css`: the tokens (surfaces, ink, accents, radii, shadows),
   the base, and the pieces every page shares -- cards, stats, buttons, chips, fields,
   the legend, the map's button column, section rules. The pages' own styles shrank

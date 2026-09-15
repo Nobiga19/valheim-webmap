@@ -157,6 +157,8 @@ const kindOf = n => { n = n.toLowerCase();
 // Floors, walls, furniture, then roofs: up close the roof tint hides nothing,
 // zoomed out the solid roof covers the beams and interior walls beneath it.
 const ORDER = ["floor", "wall", "pole", "prop", "crop", "roof"];
+// the pieces that burn; a fifth field on them says whether they still have fuel
+const FIRE = /torch|fire_pit|bonfire|hearth|brazier|sconce|fairylight|candle|lantern/;
 // Roofs are lit from the north-west: the slope facing the light goes lighter and
 // the far slope darker, so a gable reads as a roof rather than a flat tile.
 const LIGHT = 315;
@@ -172,15 +174,17 @@ function shade(hex, yaw){
 function parsePieces(json){
   const per = 1/geom.pixel, half = geom.size/2, prefabs = (json && json.prefabs) || [];
   const seen = new Set(), out = [];
-  for(const [k, x, z, yaw] of (json && json.pieces) || []){
+  for(const [k, x, z, yaw, lit] of (json && json.pieces) || []){
     const p = prefabs[k]; if(!p) continue;
     const kind = kindOf(p.n);
     const key = kind + ":" + x.toFixed(1) + ":" + z.toFixed(1) + ":" + yaw;
     if(seen.has(key)) continue; seen.add(key);
-    out.push({kind, yaw,
-              px: x*per + half, py: half - z*per,
-              w: Math.max(p.w*per, 0.08), d: Math.max(p.d*per, 0.08),
-              c: "#" + (kind === "roof" && !p.n.includes("_top") ? shade(p.c, yaw) : p.c)});
+    const q = {kind, yaw,
+               px: x*per + half, py: half - z*per,
+               w: Math.max(p.w*per, 0.08), d: Math.max(p.d*per, 0.08),
+               c: "#" + (kind === "roof" && !p.n.includes("_top") ? shade(p.c, yaw) : p.c)};
+    if(FIRE.test(p.n.toLowerCase())) q.fire = lit === undefined ? 1 : lit;   // an older server says nothing: lit
+    out.push(q);
   }
   return out.sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
 }
@@ -250,6 +254,39 @@ function drawPieces(g, v, pieces, o){
   }
   g.restore();
   g.globalAlpha = 1;
+}
+
+// ---------- fires ----------
+// Torches, fire pits and hearths as warm points over the map, merging into one
+// glow where a base is kept; one that has burnt out is a grey ring. The glow
+// grows with the zoom but stays a point: it marks a place, it does not light it.
+function drawFires(g, v, pieces){
+  if(!pieces || !pieces.length) return;
+  const pix = v.pix || 1, r = Math.min(14, Math.max(3.5, v.scale*1.1));
+  g.save();
+  g.setTransform(pix, 0, 0, pix, 0, 0);
+  for(const p of pieces){
+    if(p.fire === undefined) continue;
+    const x = v.tx + p.px*v.scale, y = v.ty + p.py*v.scale;
+    if(x < -r || y < -r || x > v.w + r || y > v.h + r) continue;
+    if(p.fire){
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, "rgba(255,196,96,.95)");
+      grad.addColorStop(.35, "rgba(255,150,40,.55)");
+      grad.addColorStop(1, "rgba(255,120,20,0)");
+      g.globalCompositeOperation = "lighter";
+      g.fillStyle = grad;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fill();
+      g.globalCompositeOperation = "source-over";
+      g.fillStyle = "#fff1c4";
+      g.beginPath(); g.arc(x, y, Math.max(1, r*.18), 0, Math.PI*2); g.fill();
+    }else{
+      g.globalCompositeOperation = "source-over";
+      g.strokeStyle = "rgba(210,210,200,.7)"; g.lineWidth = 1;
+      g.beginPath(); g.arc(x, y, Math.max(2, r*.35), 0, Math.PI*2); g.stroke();
+    }
+  }
+  g.restore();
 }
 
 // ---------- marker icons ----------
@@ -415,7 +452,7 @@ function nav(current, el){
 return {cfg, brand, setTitle, credits, toggleSide,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
-        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces,
+        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
         parsePins, ago, esc, nav};
 })();
