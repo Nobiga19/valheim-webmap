@@ -77,6 +77,7 @@ namespace WebMap
         // Written from HTTP threads, and a browser opens several connections at once
         // on the first page load: a plain Dictionary can corrupt under that.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> fileCache;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> fileStamp;   // when each cached file was read
         // The fog as bytes, laid out like a texture. A Texture2D is only the PNG
         // decoder at load; every read and write after that is on this array, so the
         // encode can run on any thread. A pixel only ever turns white, so an encode
@@ -232,6 +233,7 @@ namespace WebMap
             publicRoot = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty, "web");
 
             fileCache = new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>();
+            fileStamp = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>();
 
             httpServer.OnGet += (sender, e) =>
             {
@@ -357,14 +359,20 @@ namespace WebMap
             if (contentTypes.ContainsKey(fileExt))
             {
                 byte[] requestedFileBytes = new byte[0];
-                if (!fileCache.TryGetValue(requestedFile, out requestedFileBytes))
+                string filePath = Path.Combine(publicRoot, requestedFile);
+                // A deploy writes a new file under the same name, so the cache holds
+                // bytes only for as long as the file still carries the timestamp they
+                // were read at: one stat per request, and a new viewer shows at once.
+                DateTime stamp = DateTime.MinValue;
+                try { stamp = File.GetLastWriteTimeUtc(filePath); } catch { }
+                if (!fileCache.TryGetValue(requestedFile, out requestedFileBytes)
+                    || !fileStamp.TryGetValue(requestedFile, out var readAt) || readAt != stamp)
                 {
                     requestedFileBytes = new byte[0];
-                    string filePath = Path.Combine(publicRoot, requestedFile);
                     try
                     {
                         requestedFileBytes = File.ReadAllBytes(filePath);
-                        if (CACHE_SERVER_FILES) fileCache[requestedFile] = requestedFileBytes;
+                        if (CACHE_SERVER_FILES) { fileCache[requestedFile] = requestedFileBytes; fileStamp[requestedFile] = stamp; }
                     }
                     catch (Exception ex)
                     {

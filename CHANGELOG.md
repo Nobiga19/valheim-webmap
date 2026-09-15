@@ -18,6 +18,8 @@
   is kept -- and a burnt-out one as a grey ring. The sweep now reads each fire's fuel
   and sends it as a fifth field on those pieces; a viewer on an older server treats
   every fire as lit.
+* The bundled viewer's file cache keys on each file's timestamp, so a viewer file
+  replaced on disk is served at once instead of after the next restart.
 * One style system in `site.css`: the tokens (surfaces, ink, accents, radii, shadows),
   the base, and the pieces every page shares -- cards, stats, buttons, chips, fields,
   the legend, the map's button column, section rules. The pages' own styles shrank
