@@ -11,7 +11,6 @@ namespace WebMap
     {
         public static int TEXTURE_SIZE = 2048;
         public static int PIXEL_SIZE = 12;
-        public static int RENDER_SIZE = 2048;
         public static float EXPLORE_RADIUS = 100f;
         public static float UPDATE_FOG_TEXTURE_INTERVAL = 2f;
         public static float SAVE_FOG_TEXTURE_INTERVAL = 30f;
@@ -20,9 +19,13 @@ namespace WebMap
         public static bool ALWAYS_MAP = true;
         public static bool ALWAYS_VISIBLE = false;
         public static bool DEBUG = false;
+        public static bool TEST = false;
 
         public static int SERVER_PORT = 3000;
         public static float PLAYER_UPDATE_INTERVAL = 1f;
+        public static bool IMPORT_CARTOGRAPHY_PINS = true;
+        public static float CARTOGRAPHY_PIN_UPDATE_INTERVAL = 5f;
+        public static float CARTOGRAPHY_DEDUP_RADIUS_METERS = 3f;
         public static bool CACHE_SERVER_FILES = true;
 
         public static string WORLD_NAME = "";
@@ -30,9 +33,14 @@ namespace WebMap
         public static int DEFAULT_ZOOM = 100;
 
         public static bool SHOW_VEHICLES = true;
+        public static float VEHICLE_DISCOVERY_INTERVAL = 60f;
+        public static float VEHICLE_UPDATE_INTERVAL = 2f;
+        public static bool SHOW_BOATS = true;
+        public static bool SHOW_CARTS = true;
 
         public static string ANNOUNCE_NAME = "Server";
         public static string DISCORD_WEBHOOK = "";
+        public static string DISCORD_INVITE_URL = "";
 
         public static string URL = "";
 
@@ -45,14 +53,6 @@ namespace WebMap
             PIXEL_SIZE = config.Bind("Texture", "pixel_size",
                 WebMapConfig.PIXEL_SIZE,
                 "How many in game units does a map pixel represent? Probably dont change this.").Value;
-
-            RENDER_SIZE = config.Bind("Texture", "render_size",
-                WebMapConfig.RENDER_SIZE,
-                "Pixels across the world render (the terrain picture). Covers the same "
-                + "area as texture_size, just sharper: 4096 halves the metres per pixel. "
-                + "Costs a one-time render and a bigger download; the overlays stay at "
-                + "texture_size, where extra resolution buys nothing.").Value;
-            if (RENDER_SIZE < TEXTURE_SIZE) RENDER_SIZE = TEXTURE_SIZE;
 
             EXPLORE_RADIUS = config.Bind<float>("Texture", "explore_radius",
                 WebMapConfig.EXPLORE_RADIUS,
@@ -78,6 +78,20 @@ namespace WebMap
                 WebMapConfig.PLAYER_UPDATE_INTERVAL,
                 "How often do we send position data to web browsers in seconds.").Value;
 
+            IMPORT_CARTOGRAPHY_PINS = config.Bind("Cartography", "import_cartography_pins",
+                WebMapConfig.IMPORT_CARTOGRAPHY_PINS,
+                "Import and deduplicate pins from every cartography table without changing pins.csv.").Value;
+
+            CARTOGRAPHY_PIN_UPDATE_INTERVAL = config.Bind<float>("Interval", "cartography_pin_update_interval",
+                WebMapConfig.CARTOGRAPHY_PIN_UPDATE_INTERVAL,
+                "How often in seconds to refresh cartography table pins. Invalid table data retains the last good snapshot.").Value;
+
+            CARTOGRAPHY_DEDUP_RADIUS_METERS = config.Bind<float>("Cartography", "dedup_radius_meters",
+                WebMapConfig.CARTOGRAPHY_DEDUP_RADIUS_METERS,
+                "Cartography pins of the same type within this many meters are merged into "
+                + "the first one, which absorbs the ticked state. 0 keeps the exact-match "
+                + "deduplication only.").Value;
+
             CACHE_SERVER_FILES = config.Bind("Server", "cache_server_files",
                 WebMapConfig.CACHE_SERVER_FILES,
                 "Should the server cache web files to be more performant?").Value;
@@ -102,15 +116,41 @@ namespace WebMap
                 WebMapConfig.DEBUG,
                 "Output debugging information.").Value;
 
+            TEST = config.Bind("Server", "test",
+                WebMapConfig.TEST,
+                "Enable test features (bugs).").Value;
+
             SHOW_VEHICLES = config.Bind("Server", "show_vehicles",
                 WebMapConfig.SHOW_VEHICLES,
                 "Report boats and carts at /vehicles. They are only ever reported in "
                 + "territory players have already explored, but turning this off stops "
                 + "the endpoint reporting anything at all.").Value;
 
+            VEHICLE_DISCOVERY_INTERVAL = config.Bind<float>("Vehicles", "discovery_interval",
+                WebMapConfig.VEHICLE_DISCOVERY_INTERVAL,
+                "How often in seconds to walk the world for new and destroyed vehicles. "
+                + "Clamped to a 15 second minimum.").Value;
+
+            VEHICLE_UPDATE_INTERVAL = config.Bind<float>("Vehicles", "update_interval",
+                WebMapConfig.VEHICLE_UPDATE_INTERVAL,
+                "How often in seconds the cached vehicles are re-read for position and heading. "
+                + "Clamped to a half-second minimum.").Value;
+
+            SHOW_BOATS = config.Bind("Vehicles", "show_boats",
+                WebMapConfig.SHOW_BOATS,
+                "Include boats in the /vehicles feed.").Value;
+
+            SHOW_CARTS = config.Bind("Vehicles", "show_carts",
+                WebMapConfig.SHOW_CARTS,
+                "Include carts in the /vehicles feed.").Value;
+
             DISCORD_WEBHOOK = config.Bind("Server", "discord_webhook",
                 WebMapConfig.DISCORD_WEBHOOK,
                 "Discord webhook URL").Value;
+
+            DISCORD_INVITE_URL = config.Bind("Server", "discord_invite_url",
+                WebMapConfig.DISCORD_INVITE_URL,
+                "Optional Discord invite URL to be added to the webpage.").Value;
 
             URL = config.Bind("Server", "webmap_url",
                 WebMapConfig.URL,

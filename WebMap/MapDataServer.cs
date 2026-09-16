@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -77,62 +78,21 @@ namespace WebMap
         // Written from HTTP threads, and a browser opens several connections at once
         // on the first page load: a plain Dictionary can corrupt under that.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> fileCache;
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> fileStamp;   // when each cached file was read
-        // The fog as bytes, laid out like a texture. A Texture2D is only the PNG
-        // decoder at load; every read and write after that is on this array, so the
-        // encode can run on any thread. A pixel only ever turns white, so an encode
-        // that overlaps a write is at worst one pixel behind.
-        public byte[] fogRgba;
-        public void SetFog(Texture2D tex, bool fresh)
-        {
-            int n = WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE;
-            var b = new byte[n * 4];
-            if (fresh)
-            {
-                for (int i = 3; i < b.Length; i += 4) b[i] = 255;      // opaque black: nothing explored
-            }
-            else
-            {
-                var px = tex.GetPixels32();
-                for (int i = 0; i < px.Length && i < n; i++) { int o = i * 4; b[o] = px[i].r; b[o + 1] = px[i].g; b[o + 2] = px[i].b; b[o + 3] = px[i].a; }
-            }
-            fogRgba = b;
-            fogPngStale = true;
-        }
+        public Texture2D fogTexture;
         private readonly HttpServer httpServer;
 
         public byte[] mapImageData;
         private byte[] mapJpgCache;          // built once; the world render never changes
 
-        // The fog changes a few pixels every couple of seconds and is asked for far
-        // more often than that. Encode when it has changed, serve the bytes otherwise.
-        // EncodeArrayToPNG is thread-safe, so this may run on the HTTP thread.
-        public volatile bool fogPngStale = true;
-        public volatile int fogRev = 1;          // bumped once per pass that revealed anything
-        private byte[] fogPngCache;
-        private readonly object fogPngLock = new object();
-        public byte[] GetFogPng()
-        {
-            lock (fogPngLock)
-            {
-                if (fogPngStale || fogPngCache == null)
-                {
-                    if (fogRgba == null) return fogPngCache ?? new byte[0];
-                    int size = WebMapConfig.TEXTURE_SIZE;
-                    fogPngCache = ImageConv.EncodeRgbaToPNG(fogRgba, size, size);
-                    fogPngStale = false;
-                }
-                return fogPngCache;
-            }
-        }
-
+        // Must run on the main thread: a Texture2D cannot be created from the HTTP
+        // thread. Called right after the world render is built or loaded.
         public void BuildMapJpg()
         {
             if (mapJpgCache != null) return;
             if (mapImageData == null || mapImageData.Length == 0) return;
             try
             {
-                int size = WebMapConfig.RENDER_SIZE;      // LoadImage resizes anyway
+                int size = WebMapConfig.TEXTURE_SIZE;
                 var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
                 if (!ImageConv.LoadImage(tex, mapImageData)) return;
                 mapJpgCache = ImageConv.EncodeToJPG(tex, 85);
@@ -145,6 +105,9 @@ namespace WebMap
             }
         }
         public List<string> pins = new List<string>();
+        // Built on the game thread when the cartography refresh publishes; HTTP
+        // threads only ever read this immutable JSON string.
+        private volatile string cartographyJson = "[]";
         public List<MapMessage> sentMessages = new List<MapMessage>();
         public List<MapMessage> newMessages = new List<MapMessage>();
         // Chat arrives on the game thread, is drained by a timer on a pool thread,
@@ -163,18 +126,11 @@ namespace WebMap
         // only ever reads these strings.
         private volatile string playersWs = "players";
         private volatile string playersJson = "{\"count\":0,\"players\":[]}";
+        // Built on the game thread with the player snapshot. HTTP threads only read
+        // this immutable JSON string and never inspect game or plugin state.
+        private volatile string serverInfoJson = ServerInfoSnapshot.EmptyJson;
         public string PlayersWs => playersWs;
         private bool forceReload = false;
-        // /config carries the world name, which lives on ZNet: main-thread state.
-        // The main thread builds this when the world loads; HTTP only serves it.
-        private volatile string configJson = "{}";
-        public void RefreshConfig() => configJson = MakeClientConfigJson();
-        // Reads that the world sweep exists to serve. Anything a monitor probes
-        // (/config, /players, /map, /pins, /messages) must not keep it running.
-        private static readonly HashSet<string> sweepReads = new HashSet<string> {
-            "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces", "/trails",
-            "/forest/stats", "/structures/stats", "/state"
-        };
         private readonly string publicRoot;
         private readonly WebSocketServiceHost webSocketHandler;
         private static MapDataServer __instance;
@@ -228,12 +184,12 @@ namespace WebMap
                     if (tosend != null && tosend.Count > 0)
                         webSocketHandler.Sessions.Broadcast("messages\n[" + string.Join(",", tosend) + "]");
                 }
-            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(PLAYER_UPDATE_INTERVAL));
+            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(Math.Max(0.1f, PLAYER_UPDATE_INTERVAL)));
 
             publicRoot = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty, "web");
 
             fileCache = new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>();
-            fileStamp = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>();
+            serverInfoJson = ServerInfoSnapshot.BuildJson("", 0);
 
             httpServer.OnGet += (sender, e) =>
             {
@@ -268,15 +224,17 @@ namespace WebMap
                 if (zdoData != null)
                 {
                     Vector3 pos = zdoData.GetPosition();
-                    int maxHealth = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_maxHealth, 25));
-                    int health = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_health, maxHealth));
-                    int dead = zdoData.GetBool(ZDOVars.s_dead) ? 1 : 0;
-                    int pvp = zdoData.GetBool(ZDOVars.s_pvp) ? 1 : 0;
-                    int inbed = zdoData.GetBool(ZDOVars.s_inBed) ? 1 : 0;
+                    int maxHealth = HealthValue(zdoData, ZDOVars.s_maxHealth, 25, 25);
+                    int health = HealthValue(zdoData, ZDOVars.s_health, maxHealth, 0);
+                    float? stamina = OptionalZdoFloat(zdoData, ZDOVars.s_stamina);
+                    float? eitr = OptionalZdoFloat(zdoData, ZDOVars.s_eitr);
+                    int dead = zdoData.GetBool("dead") ? 1 : 0;
+                    int pvp = zdoData.GetBool("pvp") ? 1 : 0;
+                    int inbed = zdoData.GetBool("inBed") ? 1 : 0;
 
                     maxHealth = Math.Max(maxHealth, health);
 
-                    dataString += $"{player.m_uid}\n{player.m_playerName}\n{health}\n{maxHealth}\n";
+                    dataString += $"{player.m_uid}\n{player.m_playerName}\n{health}\n{maxHealth}\n{NullableValue(stamina)}\n{NullableValue(eitr)}\n";
                     if (!player.m_publicRefPos)
                         dataString += "hidden\n";
                     if (player.m_publicRefPos || WebMapConfig.ALWAYS_VISIBLE || WebMapConfig.ALWAYS_MAP)
@@ -302,18 +260,22 @@ namespace WebMap
                 if (zdoData == null) return;
 
                 Vector3 pos = zdoData.GetPosition();
-                int maxHealth = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_maxHealth, 25));
-                int health = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_health, maxHealth));
+                int maxHealth = HealthValue(zdoData, ZDOVars.s_maxHealth, 25, 25);
+                int health = HealthValue(zdoData, ZDOVars.s_health, maxHealth, 0);
+                float? stamina = OptionalZdoFloat(zdoData, ZDOVars.s_stamina);
+                float? eitr = OptionalZdoFloat(zdoData, ZDOVars.s_eitr);
                 maxHealth = Math.Max(maxHealth, health);
                 bool hidden = !player.m_publicRefPos;
                 bool showPos = player.m_publicRefPos || WebMapConfig.ALWAYS_VISIBLE;
 
                 var sb = new StringBuilder();
-                sb.Append("{\"name\":\"").Append(JsonEscape(player.m_playerName)).Append("\"");
+                sb.Append("{\"id\":\"").Append(player.m_uid).Append("\",\"name\":\"").Append(JsonEscape(player.m_playerName)).Append("\"");
                 sb.Append(",\"health\":").Append(health);
                 sb.Append(",\"maxHealth\":").Append(maxHealth);
-                sb.Append(",\"dead\":").Append(zdoData.GetBool(ZDOVars.s_dead) ? "true" : "false");
-                sb.Append(",\"inBed\":").Append(zdoData.GetBool(ZDOVars.s_inBed) ? "true" : "false");
+                sb.Append(",\"stamina\":").Append(NullableValue(stamina));
+                sb.Append(",\"eitr\":").Append(NullableValue(eitr));
+                sb.Append(",\"dead\":").Append(zdoData.GetBool("dead") ? "true" : "false");
+                sb.Append(",\"inBed\":").Append(zdoData.GetBool("inBed") ? "true" : "false");
                 sb.Append(",\"hidden\":").Append(hidden ? "true" : "false");
                 if (showPos)
                 {
@@ -331,6 +293,25 @@ namespace WebMap
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", " ").Replace("\r", " ").Replace("\t", " ");
         }
 
+        private static float? OptionalZdoFloat(ZDO zdo, int key)
+        {
+            float value = zdo.GetFloat(key, float.NaN);
+            return float.IsNaN(value) || float.IsInfinity(value) || value < 0f ? (float?)null : value;
+        }
+
+        private static int HealthValue(ZDO zdo, int key, int missingFallback, int invalidFallback)
+        {
+            float value = zdo.GetFloat(key, missingFallback);
+            if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f || value > int.MaxValue)
+                return invalidFallback;
+            return (int)Math.Ceiling(value);
+        }
+
+        private static string NullableValue(float? value)
+        {
+            return value.HasValue ? value.Value.ToString("0.##", CultureInfo.InvariantCulture) : "null";
+        }
+
         public static MapDataServer getInstance()
         {
             return __instance;
@@ -346,7 +327,7 @@ namespace WebMap
             HttpListenerRequest req = e.Request;
             HttpListenerResponse res = e.Response;
 
-            string rawRequestPath = req.RawUrl.Split('?')[0];   // ?v= is for caches, not for us
+            string rawRequestPath = req.RawUrl;
             if (rawRequestPath == "/") rawRequestPath = "/index.html";
 
             // GetFileName, not the last '/'-separated part: splitting on '/' alone
@@ -359,20 +340,14 @@ namespace WebMap
             if (contentTypes.ContainsKey(fileExt))
             {
                 byte[] requestedFileBytes = new byte[0];
-                string filePath = Path.Combine(publicRoot, requestedFile);
-                // A deploy writes a new file under the same name, so the cache holds
-                // bytes only for as long as the file still carries the timestamp they
-                // were read at: one stat per request, and a new viewer shows at once.
-                DateTime stamp = DateTime.MinValue;
-                try { stamp = File.GetLastWriteTimeUtc(filePath); } catch { }
-                if (!fileCache.TryGetValue(requestedFile, out requestedFileBytes)
-                    || !fileStamp.TryGetValue(requestedFile, out var readAt) || readAt != stamp)
+                if (!fileCache.TryGetValue(requestedFile, out requestedFileBytes))
                 {
                     requestedFileBytes = new byte[0];
+                    string filePath = Path.Combine(publicRoot, requestedFile);
                     try
                     {
                         requestedFileBytes = File.ReadAllBytes(filePath);
-                        if (CACHE_SERVER_FILES) { fileCache[requestedFile] = requestedFileBytes; fileStamp[requestedFile] = stamp; }
+                        if (CACHE_SERVER_FILES) fileCache[requestedFile] = requestedFileBytes;
                     }
                     catch (Exception ex)
                     {
@@ -382,8 +357,7 @@ namespace WebMap
 
                 if (requestedFileBytes.Length > 0)
                 {
-                    // a page must pick up a new build on the next visit; its assets can wait a bit
-                    res.Headers.Add(HttpResponseHeader.CacheControl, fileExt == "html" ? "no-cache" : "public, max-age=300");
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
                     res.ContentType = contentTypes[fileExt];
                     res.StatusCode = 200;
                     res.ContentLength64 = requestedFileBytes.Length;
@@ -406,10 +380,8 @@ namespace WebMap
         {
             HttpListenerRequest req = e.Request;
             HttpListenerResponse res = e.Response;
-            string rawRequestPath = req.RawUrl.Split('?')[0];
+            string rawRequestPath = req.RawUrl;
             byte[] textBytes;
-
-            if (sweepReads.Contains(rawRequestPath)) StructureMap.LastRead = Environment.TickCount;
 
             switch (rawRequestPath)
             {
@@ -417,7 +389,7 @@ namespace WebMap
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
                     res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(configJson);
+                    textBytes = Encoding.UTF8.GetBytes(MakeClientConfigJson());
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
@@ -441,12 +413,6 @@ namespace WebMap
                         return true;
                     }
                 case "/map":
-                    if (mapImageData == null || mapImageData.Length == 0)
-                    {
-                        res.StatusCode = 503;          // still rendering; never cached
-                        res.Close();
-                        return true;
-                    }
                     // Doing things this way to make the full map harder to accidentally see.
                     res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
                     res.ContentType = "application/octet-stream";
@@ -458,20 +424,9 @@ namespace WebMap
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
-                    byte[] fogBytes = GetFogPng();
-                    if (fogBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
+                    byte[] fogBytes = ImageConv.EncodeToPNG(fogTexture);
                     res.ContentLength64 = fogBytes.Length;
                     res.Close(fogBytes, true);
-                    return true;
-                case "/chart":
-                    // one image per world, never changing: let the edge keep it
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=3600");
-                    res.ContentType = "image/png";
-                    res.StatusCode = 200;
-                    byte[] chartBytes = Chart.GetPng();
-                    if (chartBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
-                    res.ContentLength64 = chartBytes.Length;
-                    res.Close(chartBytes, true);
                     return true;
                 case "/messages":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
@@ -489,12 +444,19 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/api/server-info":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(serverInfoJson);
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
                 case "/structures":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
                     byte[] structureBytes = StructureMap.GetPng();
-                    if (structureBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
                     res.ContentLength64 = structureBytes.Length;
                     res.Close(structureBytes, true);
                     return true;
@@ -503,18 +465,8 @@ namespace WebMap
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
                     byte[] forestBytes = ForestMap.GetPng();
-                    if (forestBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // not rendered yet: never a cacheable empty 200
                     res.ContentLength64 = forestBytes.Length;
                     res.Close(forestBytes, true);
-                    return true;
-                case "/trails":
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "image/png";
-                    res.StatusCode = 200;
-                    byte[] trailBytes = Trails.GetPng();
-                    if (trailBytes.Length == 0) { res.StatusCode = 503; res.Close(); return true; }   // nothing walked yet, or not rendered
-                    res.ContentLength64 = trailBytes.Length;
-                    res.Close(trailBytes, true);
                     return true;
                 case "/forest/stats":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
@@ -532,64 +484,11 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
-                case "/portals":
+                case "/cartography/pins":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
                     res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Portals.GetJson());
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
-                    return true;
-                case "/graves":
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Graves.GetJson());
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
-                    return true;
-                case "/pieces":
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Pieces.GetJson());
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
-                    return true;
-                case "/state":
-                    // One document per tick for a viewer: every small block the page
-                    // polls, and a revision per large layer so it fetches a layer only
-                    // when the picture changed. Each block is a string another thread
-                    // already built; this is concatenation.
-                    {
-                        string pinsJson;
-                        lock (pins)
-                        {
-                            var q = new List<string>(pins.Count);
-                            foreach (string line in pins) q.Add("\"" + JsonEscape(line) + "\"");
-                            pinsJson = "[" + string.Join(",", q) + "]";
-                        }
-                        string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                            + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
-                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev + "}"
-                            + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
-                            + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
-                            + ",\"traders\":" + Traders.Json() + ",\"deaths\":" + Stats.DeathsJson()
-                            + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats()
-                            + ",\"stats\":" + Stats.Json(PinsByName()) + "}";
-                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                        res.ContentType = "application/json";
-                        res.StatusCode = 200;
-                        textBytes = Encoding.UTF8.GetBytes(state);
-                        res.ContentLength64 = textBytes.Length;
-                        res.Close(textBytes, true);
-                        return true;
-                    }
-                case "/stats/players":
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Stats.Json(PinsByName()));
+                    textBytes = Encoding.UTF8.GetBytes(cartographyJson);
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
@@ -637,6 +536,15 @@ namespace WebMap
                         res.Close(textBytes, true);
                         return true;
                     }
+                case "/structures/refresh":
+                    // Ask for a sweep; the scan itself must happen on the main thread.
+                    StructureMap.RefreshRequested = true;
+                    res.ContentType = "application/json";
+                    res.StatusCode = 202;
+                    textBytes = Encoding.UTF8.GetBytes("{\"queued\":true}");
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
                 case "/pins":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "text/csv";
@@ -659,18 +567,7 @@ namespace WebMap
             {
                 playersWs = BuildPlayerResponse();
                 playersJson = BuildPlayersJson();
-                foreach (var player in players)
-                {
-                    ZDO z = null;
-                    try { z = ZDOMan.instance.GetZDO(player.m_characterID); } catch { }
-                    if (z == null) continue;
-                    long pid = 0L;
-                    try { pid = z.GetLong(ZDOVars.s_playerID, 0L); } catch { }
-                    Stats.Seen(player.m_playerName, pid, z.GetPosition());
-                    Trails.Mark(pid != 0L ? pid : player.m_playerName.GetHashCode(), z.GetPosition());
-                }
-                Stats.MaybeSave();
-                Trails.MaybeSave();
+                serverInfoJson = ServerInfoSnapshot.BuildJson(WebMap.currentWorldName, players.Count);
             }
             catch (Exception ex)
             {
@@ -698,19 +595,9 @@ namespace WebMap
             webSocketHandler.Sessions.Broadcast($"ping\n{id}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}");
         }
 
-        // Pins by the character name in each CSV line, for the player tallies.
-        public Dictionary<string, int> PinsByName()
+        public void BroadcastMessage(long id, int type, string name, string message)
         {
-            var d = new Dictionary<string, int>();
-            lock (pins)
-                foreach (string line in pins)
-                {
-                    var parts = line.Split(',');
-                    if (parts.Length < 4) continue;
-                    d.TryGetValue(parts[3], out int n);
-                    d[parts[3]] = n + 1;
-                }
-            return d;
+            webSocketHandler.Sessions.Broadcast($"message\n{id}\n{type}\n{name}\n{message}");
         }
 
         public void AddPin(string id, string pinId, string type, string name, Vector3 position, string pinText)
@@ -718,6 +605,31 @@ namespace WebMap
             lock (pins) pins.Add($"{id},{pinId},{type},{name},{FixedValue(position.x)},{FixedValue(position.z)},{pinText}");
             webSocketHandler.Sessions.Broadcast(
                 $"pin\n{id}\n{pinId}\n{type}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}\n{pinText}");
+        }
+
+        // Cartography pins are a separate read-only endpoint now: they no longer
+        // join the user-owned pins.csv list or the pin/rmpin broadcasts, so the two
+        // pin systems cannot shadow each other. The whole JSON snapshot is built
+        // here on the game thread and swapped in as one immutable string.
+        internal void ReplaceCartographyPins(IEnumerable<CartographyWebPin> nextPins)
+        {
+            var sb = new StringBuilder();
+            sb.Append('[');
+            bool first = true;
+            foreach (var pin in (nextPins ?? Enumerable.Empty<CartographyWebPin>()))
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append("{\"id\":\"").Append(pin.Id)
+                  .Append("\",\"name\":\"").Append(JsonEscape(CartographyPinProjection.Clean(pin.Name)))
+                  .Append("\",\"type\":\"").Append(pin.Type)
+                  .Append("\",\"x\":").Append(pin.X.ToString("0.#", CultureInfo.InvariantCulture))
+                  .Append(",\"z\":").Append(pin.Z.ToString("0.#", CultureInfo.InvariantCulture))
+                  .Append(",\"checked\":").Append(pin.Checked ? "true" : "false")
+                  .Append('}');
+            }
+            sb.Append(']');
+            cartographyJson = sb.ToString();
         }
 
         public void RemovePin(int idx)

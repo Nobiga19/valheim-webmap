@@ -1,167 +1,167 @@
 # Valheim WebMap
 
-A **server-side** mod that publishes a live web map of your world. Share
-`http://your_ip:port` and anyone can watch — **clients need no mods.** Dedicated
-server only.
+A **server-side** mod that publishes a live web map of your Valheim world. Share
+`http://your_ip:port` and anyone can watch the map — **clients do not need any mods
+installed.**
 
-A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
+This is a fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**,
+with an overlay of player-built structures added.
+
+This 2.10.0 candidate adds a read-only Spanish “Servidor” view in the bundled map
+viewer and its supporting public server-information endpoint.
 
 ![screenshot](https://github.com/user-attachments/assets/981287f3-f5fa-4e09-878e-e2c94f6cc19c)
 
+For players to appear on the map they must set **visible to other players** on the
+in-game map screen (press `m`).
+
+Dedicated server only.
+
 ## Features
 
-* Explorable map in the browser — wheel zoom, pinch on mobile.
-* Shared fog of war: only what players have actually explored.
-* Live player list and positions, auto-follow, and in-game pings.
-* **Structures** — placed pieces drawn in the colour of their material, so bases read as
-  bases. Keyed off the piece's creator, so terrain and world-generated ruins never appear.
-  The sweep behind it runs only while someone is looking at the map.
-* **Forest and logging** — standing trees shade the terrain and felled ground stops being
-  shaded, so clearings show through. Stumps are counted as the record of felling.
-* **Boats and carts**, in explored territory only.
-* **Portals, graves and every placed piece** as JSON, for a front-end of your own. The
-  bundled page does not draw them yet.
-* **World render at the resolution you choose** — `render_size` 4096 halves the metres
-  per pixel, and rendering no longer stalls the server.
-* **Server announcements** on every player's screen, for restart warnings and the like.
-* Chat, deaths and joins in the message log; optional Discord notifications.
+* An explorable map of your world in the browser — mousewheel zoom, pinch zoom on mobile.
+* Shared fog of war: the map reveals only what players have actually explored.
+* Connected players list, live positions, and auto-follow.
+* In-game map pings show up on the web map.
+* **Player-built structures overlay** — every placed piece is drawn in the colour of its
+  material (wood, stone, black marble, thatch, metal, portals), so bases read as bases
+  instead of blobs. Natural terrain and world-generated ruins are not drawn; the sweep
+  keys off the piece's creator, so only things a player placed appear.
+* **Forest and logging overlay** — standing trees shade the terrain, and felled ground
+  stops being shaded, so clearings show through as bare terrain. Stumps are counted as
+  the positive record of felling.
+* **Server announcements** — `POST /announce` puts a message on every player's screen,
+  for restart warnings and anything else worth saying in game.
+* Connect / chat messages and Discord server-status notifications.
 
-## Install
+## Installation
 
-1. With [BepInEx] working, put the `WebMap` directory in
-   `Valheim dedicated server/BepInEx/plugins/WebMap`.
-2. Start the server once to write a default config.
-3. **Stop the server** before editing that config — BepInEx rewrites it on shutdown, so
-   edits made while it runs are discarded.
-4. Open the configured port (default `8080`) and visit `http://your_ip:port`.
+1. With [BepInEx] installed and working, place the `WebMap` directory in:
 
-After updating, hard-reload the page (`shift`+reload) to clear cached layers.
+       Steam\steamapps\common\Valheim dedicated server\BepInEx\plugins\WebMap
 
-## Using the map
+2. Start the server once; a default config is written to:
 
-The viewer at `http://your_ip:port` is four pages — the live map, a portal atlas drawn on
-a biome chart, a planning board for drawing and sharing routes, and per-player tallies —
-with a legend that switches each layer and a Layers card, as on Google Maps, holding
-presets of the legend and the choice of ground: the render, or the flat biome atlas.
-The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
-holds across pages. Its source is `WebMap/web`: `site.css` is the style system every
-page draws from, `map-core.js` the rendering core, and each page holds only its own.
-Our own hosted copy at
-[xn-valheim] deploys the same files with a `site-config.js` that names our server.
+       Steam\steamapps\common\Valheim dedicated server\BepInEx\config
 
-Players only appear once they set **visible to other players** on the in-game map (`m`).
+3. **Stop the server**, edit the config, then start it again. BepInEx rewrites its config
+   on shutdown, so changes made while the server is running are lost.
 
-### Chat commands
-
-* `!pin` — a dot where you stand. `!pin some text` labels it.
-* `!pin <type> <text>` — types are `dot`, `fire`, `mine`, `house`, `cave`.
-* `!undoPin` — remove your most recent pin.
-* `!deletePin <text>` — remove the pin matching that text. With no text, your most recent
-  unnamed pin.
-
-Not case sensitive. Past the configured limit a player's oldest pin is dropped.
-
-### Server announcements
-
-`POST /announce`, message as the body, `X-Announce-Token` header. The secret lives in
-`announce.token` beside the DLL — not in the BepInEx config, which is rewritten on
-shutdown and would discard it. No token file means the route is closed.
-
-## Configuration
-
-Standard BepInEx config, plus:
-
-* `render_size` — pixels across the world render, default 2048. Same area as
-  `texture_size`, only sharper: 4096 halves the metres per pixel for a one-time render of
-  about a minute and a larger download. The overlays stay at `texture_size`, where extra
-  resolution buys nothing. A `map.png` of the wrong size is rebuilt on start.
-* `show_vehicles` — report boats and carts at `/vehicles`. They are only ever reported in
-  explored territory; off stops them being reported at all.
+4. Open the configured port (default `3000`) and visit `http://your_ip:port`.
 
 ## HTTP endpoints
 
+Besides the map UI, the server exposes:
+
 | Path | Returns |
 |------|---------|
-| `/map`, `/map.jpg` | the world render; the JPEG is about a seventh the size |
-| `/fog` | explored mask (PNG) |
-| `/chart` | the world as a chart: each pixel its biome's flat colour, water one blue, no relief (PNG, once per world) |
-| `/structures`, `/structures/stats` | structures overlay; counts by prefab and the last sweep's cost |
-| `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
-| `/trails` | where players have walked: a count per map pixel, drawn as a faint blue band; 503 until the first sweep after someone walks (PNG) |
-| `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |
-| `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
-| `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
-| `/vehicles` | boats and carts, position and type (JSON) |
-| `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
+| `/map` | the world render (PNG) |
+| `/map.jpg` | the same render as JPEG — about a seventh the size, and the render is opaque so nothing is lost |
+| `/forest` | forest cover and logging (PNG, transparent) |
+| `/forest/stats` | tree and stump counts, and canopy density percentiles (JSON) |
+| `/vehicles` | boats and carts in explored territory, with position and type (JSON) |
+| `/announce` | POST a line to every player's screen (see below) |
+| `/fog` | the explored mask (PNG) |
+| `/structures` | player-built structures overlay (PNG, transparent) |
+| `/structures/stats` | piece counts by prefab (JSON) |
+| `/structures/refresh` | queue an immediate structure sweep |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
-| `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=` |
-| `/announce` | POST, see above |
+| `/api/server-info` | read-only game/world/player-count summary and a fixed mod catalog (JSON) |
 
-The structure sweep walks every ZDO on the game thread, a few thousand per frame;
-everything after the walk runs on a pool thread. It runs only while someone is reading the map: a request to any layer or to the sweep-fed JSON
-arms it for two minutes, sweeps start at least a minute apart, and an idle server does
-none at all. `/config`, `/players`, `/map`, `/pins` and `/messages` do not arm it, so a
-monitor probing those keeps the game idle. `/structures/stats` reports the last sweep —
-ZDOs walked, game-thread milliseconds, frames, wall time, gen-2 collections — so the cost
-can be read rather than guessed.
+`/api/server-info` returns only `{server,mods,updatedAt}`. The server summary contains
+the game version, world name, and player count. Each catalog entry contains its public
+identity, runtime status, URL, description, and an explicit allowlist of safe WebMap
+configuration values (`alwaysMap`, `alwaysVisible`, `showVehicles`, and
+`importCartographyPins`). It never publishes player/account identifiers, passwords, tokens,
+webhooks, ports, paths, or newly added configuration keys. The endpoint reads the
+BepInEx runtime registry directly and works without ServerInfo; unavailable planned
+mods remain listed as `available`, registry failures are `error`, and RCON is always
+reported as `disabled`.
 
-## Notes for developers
+The structure sweep walks every ZDO on the main thread in slices, so it runs on a slow
+cadence (2 minutes by default) rather than with the map refresh.
 
-**Chat.** Valheim 1.0 addresses chat to each recipient rather than broadcasting it, so a
-hook on `HandleRoutedRPC` sees only pings. It still passes through the server, though:
-`RPC_RoutedRPC` calls `RouteRPC` to forward it, and that is where this mod observes chat.
-A shout arrives once per recipient and is de-duplicated on sender, method and payload.
+## Updating
 
-Upstream instead registered a fake server-side player so clients would address the server.
-**On 1.0 that stops anyone joining at all** — the server stays healthy and registered but
-logs zero connection attempts — so it is gone here. Don't put it back.
+**Clear your browser cache** after updating, or hold `shift` and click reload.
 
-**The sweep yields only between sector lists.** Yielding inside a `List<ZDO>` lets the
-game's removals shift the index under the walk and skip ZDOs; a whole sector between
-yields is the smallest safe step.
+## Chat commands
 
-**Announcements** use `MessageHud`'s `ShowMessage` rather than chat: `Chat` gates every
-message on a `RelationsManager` permission check against the sender's platform user id,
-which a server does not have, so chat sent from a server is dropped in silence.
+Pins can be placed from in-game chat:
 
-### Checking the viewer against a live server
+* `!pin` — a dot pin where you stand.
+* `!pin my pin name` — a dot pin with a label.
+* `!pin [type] [text]` — types are `dot`, `fire`, `mine`, `house`, `cave`.
+* `!undoPin` — remove your most recent pin.
+* `!deletePin [text]` — remove the most recent pin whose text matches exactly.
 
-`tools/sameorigin.py WebMap/web http://your_ip:port 8765` serves the viewer the way the
-mod does -- the pages from disk, every other path forwarded to the server -- and
-`tools/shoot.mjs http://127.0.0.1:8765 /tmp/out 9333 / /portals.html /plan.html /players.html`
-drives a headless Chrome over it and prints what each page drew, which hosts it talked
-to, and any exception. A viewer change is done when that is clean.
+Commands are not case sensitive. Past the configured limit, a player's oldest pin is dropped.
 
-### Local test server
+## Server announcements
+
+`POST /announce` with the message as the body and an `X-Announce-Token` header shows the
+text on every connected player's screen. The shared secret goes in a file named
+`announce.token` beside the DLL — not in the BepInEx config, which is rewritten on
+shutdown and would discard it. With no token file the route is closed.
+
+It deliberately uses `MessageHud`'s `ShowMessage` RPC rather than chat: `Chat` gates every
+message on `RelationsManager.CheckPermissionAsync(sender.UserId, …)`, and a server has no
+platform user id to satisfy that with, so chat sent from a server is dropped in silence.
+
+## How chat reaches the server on 1.0
+
+Worth writing down, because it is not obvious. Valheim 1.0 sends player chat **addressed
+to each permitted recipient**, never broadcast:
+
+```csharp
+Chat.SendText (shout)      -> InvokeRoutedRPC(user, "ChatMessage", headPoint, 2, userInfo, text)
+Talker.Say   (normal/whisper) -> m_nview.InvokeRPC(user, "Say", (int)type, userInfo, text)
+```
+
+The server's `RPC_RoutedRPC` only calls `HandleRoutedRPC` when the target is itself or
+Everybody. Player chat addressed to another player instead goes down `RouteRPC`, which is
+where the map observes ordinary chat. A chat send arrives once per recipient and identical
+copies are grouped by their target IDs.
+
+Upstream solved this by registering a fake server-side player so clients would address the
+server too. **On 1.0 that patch stops anyone joining at all** — the server stays healthy and
+registered but logs zero connection attempts — so it is not used here and the code is gone.
+
+## Local test server
 
 `./testserver.sh` runs the same image the hosts do
-([indifferentbroccoli/valheim-server-docker]) under podman.
+([indifferentbroccoli/valheim-server-docker]) in podman, so a change can be tried
+against a real server before it goes anywhere near a live one.
 
 ```bash
 ./testserver.sh up       # first run downloads the game, ~10 min
-./testserver.sh deploy   # build, copy in, restart
+./testserver.sh deploy   # build the mod, copy it in, restart
 ./testserver.sh status   # container + endpoints
 ./testserver.sh logs
 ```
 
-Join with **Join by IP → `127.0.0.1:2456`**, password `testpass123`.
+Then join it in game with **Join by IP -> `127.0.0.1:2456`**, password `testpass123`.
 
-Two things worth knowing: steamcmd fails `app_update` with
-`Missing configuration`, having downloaded nothing, in roughly one run in four — it is
-transient, so just run it again. And on an SELinux host the bind mounts need `:z` or the
-container silently sees nothing.
+Two things it works around, both worth knowing:
 
-## Licence and credit
+* The image's `install.scmd` runs `force_install_dir` **before** `login`, and steamcmd
+  then fails with `Failed to install app '896660' (Missing configuration)` having
+  downloaded nothing. The script mounts a corrected copy with the order swapped. (The
+  `-beta` argument is fine; it is only the ordering.)
+* On an SELinux host the bind mounts need `:z`, or the container silently sees nothing.
+
+## Licence
 
 MIT where applicable.
 
-* 1.0 update, structures, forest, vehicles, portals, graves and pieces by [Hunter Boyd](https://github.com/hunterjsb)
+## Credit
+
+* 1.0 update and structures overlay by [Hunter Boyd](https://github.com/hunterjsb)
 * Maintained upstream by [Jeff Clark](https://github.com/h0tw1r3)
 * Original work by [Kyle Paulsen](https://github.com/kylepaulsen)
-* Background by [webtreats], [CC BY 2.0]
+* Background by [webtreats], released under the [CC BY 2.0] license.
 
 [h0tw1r3/valheim-webmap]: https://github.com/h0tw1r3/valheim-webmap
-[xn-valheim]: https://github.com/hunter-jsb/xn-valheim
 [BepInEx]: https://github.com/BepInEx/BepInEx
 [indifferentbroccoli/valheim-server-docker]: https://github.com/indifferentbroccoli/valheim-server-docker
 [webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254

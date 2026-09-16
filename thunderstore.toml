@@ -11,7 +11,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "Mubs"
 name = "WebMap"
-versionNumber = "0.0.0"
+versionNumber = "2.10.0"
 description = "Dedicated-server web map for Valheim 1.0."
 websiteUrl = "https://github.com/hunter-jsb/valheim-webmap"
 containsNsfwContent = false
