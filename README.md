@@ -23,6 +23,10 @@ Dedicated server only.
 * Shared fog of war: the map reveals only what players have actually explored.
 * Connected players list, live positions, and auto-follow.
 * In-game map pings show up on the web map.
+* **Cartography table pins** — the browser map can read the pins stored in every
+  in-game cartography table. This is useful alongside
+  [ServersideQoL.AutoMapTables], which keeps the game tables updated with its
+  supported automatic portal and ship entries.
 * **Player-built structures overlay** — every placed piece is drawn in the colour of its
   material (wood, stone, black marble, thatch, metal, portals), so bases read as bases
   instead of blobs. Natural terrain and world-generated ruins are not drawn; the sweep
@@ -66,6 +70,7 @@ Besides the map UI, the server exposes:
 | `/structures/stats` | piece counts by prefab (JSON) |
 | `/structures/refresh` | queue an immediate structure sweep |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
+| `/cartography/pins` | deduplicated cartography-table pins (JSON, read-only) |
 | `/api/server-info` | read-only game/world/player-count summary and a fixed mod catalog (JSON) |
 
 `/api/server-info` returns only `{server,mods,updatedAt}`. The server summary contains
@@ -74,9 +79,37 @@ identity, runtime status, URL, description, and an explicit allowlist of safe We
 configuration values (`alwaysMap`, `alwaysVisible`, `showVehicles`, and
 `importCartographyPins`). It never publishes player/account identifiers, passwords, tokens,
 webhooks, ports, paths, or newly added configuration keys. The endpoint reads the
-BepInEx runtime registry directly and works without ServerInfo; unavailable planned
-mods remain listed as `available`, registry failures are `error`, and RCON is always
-reported as `disabled`.
+BepInEx runtime registry directly and works without ServerInfo. The catalog is fixed at
+build time, so it can include mods that are not installed: those entries report
+`available`; explicitly disabled entries report `disabled`; registry failures report
+`error`.
+
+### Cartography table integration
+
+WebMap reads the compressed pin data from every cartography table on the server and
+publishes a single snapshot at `/cartography/pins`. The browser polls that endpoint
+and displays the result as a separate map layer; these pins do not enter the
+player-owned `pins.csv` store or the live `pin`/`rmpin` broadcasts.
+
+The intended pairing with [ServersideQoL.AutoMapTables] is:
+
+1. Enable the AutoMapTables module and its automatic table updates in the
+   `ArgusMagnus.ServersideQoL.AutoMapTables.cfg` file.
+2. Leave WebMap's `import_cartography_pins` enabled (the default) in its
+   `[Cartography]` section.
+3. Open the WebMap viewer to see the current cartography-table data, including
+   entries AutoMapTables has written to those tables.
+
+AutoMapTables and WebMap have separate responsibilities: AutoMapTables updates the
+game's cartography-table contents, while WebMap reads and displays them. WebMap does
+not write to tables, synchronize arbitrary web pins back into the game, or change
+`pins.csv`.
+
+WebMap rescans at `cartography_pin_update_interval` seconds (5 by default). Exact
+copies are collapsed, and same-type pins within `dedup_radius_meters` (3 metres by
+default) are merged. If one table cannot be decoded, its last good snapshot is kept
+until a later scan; a bad table does not clear healthy tables' pins. Set
+`import_cartography_pins = false` to disable this import and clear the layer.
 
 The structure sweep walks every ZDO on the main thread in slices, so it runs on a slow
 cadence (2 minutes by default) rather than with the map refresh.
@@ -163,6 +196,7 @@ MIT where applicable.
 
 [h0tw1r3/valheim-webmap]: https://github.com/h0tw1r3/valheim-webmap
 [BepInEx]: https://github.com/BepInEx/BepInEx
+[ServersideQoL.AutoMapTables]: https://thunderstore.io/c/valheim/p/ArgusMagnus/ServersideQoL_AutoMapTables/
 [indifferentbroccoli/valheim-server-docker]: https://github.com/indifferentbroccoli/valheim-server-docker
 [webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254
 [CC BY 2.0]: https://creativecommons.org/licenses/by/2.0/
