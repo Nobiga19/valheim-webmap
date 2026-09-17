@@ -330,6 +330,7 @@ ASALocalRun/
 
 notes.txt
 ValheimWebMap.zip
+*/web/main.js
 libs/valheim
 libs/BepInEx
 WebMap.dll
@@ -344,5 +345,6 @@ announce.token
 # thunderstore service account token, local only
 .env
 
-# the viewer check scripts are ours, not a build output
-!tools/
+# webmap 2.10.1 work backups
+*.bak-vehicles
+.backups-vehicles/

@@ -1,0 +1,54 @@
+{
+  "duplicateAcrossTables": {
+    "pins": [
+      { "name": "Portal", "x": 12.3456, "z": -8.7654, "type": 1, "checked": false },
+      { "name": "Portal", "x": 12.3456, "z": -8.7654, "type": 1, "checked": false }
+    ],
+    "expectedCount": 1
+  },
+  "unicodeAndCsvSafety": {
+    "pins": [{ "name": "Árbol,\n村", "x": 1, "z": 2, "type": 2, "checked": true }],
+    "expectedName": "Árbol  村"
+  },
+  "distinctRawLabels": {
+    "pins": [
+      { "name": "A,B", "x": 3, "z": 4, "type": 1 },
+      { "name": "A B", "x": 3, "z": 4, "type": 1 }
+    ],
+    "expectedCount": 2
+  },
+  "emptyTable": { "pins": [], "expectedCount": 0 },
+  "checkedStateDoesNotDuplicate": {
+    "pins": [
+      { "name": "Shared", "x": 5, "z": 8, "type": 3, "checked": false },
+      { "name": "Shared", "x": 5, "z": 8, "type": 3, "checked": true }
+    ],
+    "expectedCount": 1
+  },
+  "nearbyButDistinct": {
+    "pins": [
+      { "name": "Close", "x": 5, "z": 8, "type": 1 },
+      { "name": "Close", "x": 5.0004, "z": 8, "type": 1 }
+    ],
+    "expectedCount": 2
+  },
+  "changeAndRemoval": {
+    "before": [{ "name": "Old", "x": 10, "z": 20, "type": 0, "checked": false }],
+    "after": [{ "name": "Moved", "x": 11, "z": 20, "type": 0, "checked": false }],
+    "expectedRemoved": 1,
+    "expectedAdded": 1
+  },
+  "corruptTable": {
+    "compressed": "not-a-zpackage",
+    "lastGood": [{ "name": "Prior" }],
+    "healthy": [{ "name": "Current" }],
+    "expectedMerged": [{ "name": "Prior" }, { "name": "Current" }]
+  },
+  "telemetry": [
+    { "value": null, "expected": null },
+    { "value": -1, "expected": null },
+    { "value": "Infinity", "expected": null },
+    { "value": "NaN", "expected": null },
+    { "value": 42.5, "expected": 42.5 }
+  ]
+}

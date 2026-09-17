@@ -1,0 +1,441 @@
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+    height: 100%;
+    font-family: sans-serif;
+    touch-action: none;
+}
+
+body {
+    background-image: url('tile.webp');
+    background-repeat: repeat;
+}
+
+canvas {
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    width: 100%;
+    height: 100%;
+    clip-path: circle(42.725% at center);
+}
+
+@keyframes pulse {
+    from {
+        transform: translate(-50%, -50%) scale(1);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.5);
+    }
+
+    to {
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+
+.map {
+    position: fixed;
+}
+
+.mapBorder {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+body .map.zooming {
+    transition: none;
+}
+
+.menu-btn {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    padding: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 20;
+}
+
+    .menu-btn:hover .bar {
+        background: #ccc;
+    }
+
+    .menu-btn .bar {
+        background: #fff;
+        width: 30px;
+        height: 3px;
+        margin-bottom: 4px;
+        border-radius: 10px 0;
+        box-shadow: 0px 0px 3px 1.5px #000;
+        transition: background 0.1s ease-in-out;
+    }
+
+        .menu-btn .bar:last-child {
+            margin-bottom: 0;
+        }
+
+.menu {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 16px 10px 12px;
+    position: fixed;
+    top: 46px;
+    /* left: 14px; */
+    left: -180px;
+    font-size: 14px;
+    transition: left 0.3s ease-in-out;
+    z-index: 20;
+}
+
+    .menu.menuOpen {
+        left: 0px;
+    }
+
+.menu label {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .menu .inputRow {
+        display: flex;
+        align-items: center;
+        height: 26px;
+    }
+
+.inputRow input {
+    margin-right: 8px;
+}
+
+.serverInfoLink {
+    color: #fff;
+    display: block;
+    margin: 4px 0 8px;
+}
+
+.serverInfo {
+    background: rgba(0, 0, 0, 0.92);
+    color: #fff;
+    inset: 0;
+    overflow: auto;
+    padding: 24px max(24px, calc((100% - 900px) / 2));
+    position: fixed;
+    z-index: 30;
+}
+
+.serverInfo a { color: #8bc8ff; }
+.serverInfoSummary, .serverInfoMod dl { display: grid; grid-template-columns: minmax(130px, 220px) 1fr; gap: 6px 14px; }
+.serverInfoSummary dt, .serverInfoMod dt { color: #bbb; }
+.serverInfoSummary dd, .serverInfoMod dd { margin: 0; overflow-wrap: anywhere; }
+.serverInfoMod { border-top: 1px solid #555; margin-top: 18px; padding-top: 12px; }
+.serverInfoMod h3, .serverInfoMod h4 { margin-bottom: 8px; }
+.serverInfoMod h4 { font-size: 1em; }
+
+.mapText {
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    text-shadow: 0 0 6px #000, 0 0 6px #000, 0 0 3px #000;
+    user-select: none;
+    pointer-events: none;
+}
+
+#messages {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px;
+    position: fixed;
+    left: 0px;
+    bottom: 0px;
+    z-index: 10;
+    font-size: 12px;
+    transition: left 0.3s ease-in-out;
+}
+
+#messages .datetime {
+    color: gray;
+    text-align: right;
+}
+
+#messages .date {
+    display: none;
+}
+
+#messages .name {
+    color: darkorange;
+}
+
+#messages .name::after {
+    color: white;
+    content: ":";
+}
+
+#messages .type2 .text {
+    color: gold;
+    text-transform: uppercase;
+}
+
+#messages .server .name {
+    color: deepskyblue;
+}
+
+#messages td > p {
+    display: contents;
+}
+
+.coords {
+    position: fixed;
+    right: 8px;
+    bottom: 6px;
+    z-index: 10;
+    font-size: 10px;
+}
+
+.mapIcon {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    background-image: url('mapIcons.png');
+    background-size: 192px;
+    transform: translate(-50%, -50%);
+}
+
+    .mapIcon .center {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, 0);
+    }
+
+    .mapIcon .text {
+        bottom: -11px;
+    }
+
+    .mapIcon.player {
+        background-position: 0 0;
+        filter: hue-rotate(240deg);
+    }
+
+    .mapIcon.fire {
+        background-position: -32px 0;
+    }
+
+    .mapIcon.dot {
+        background-position: -64px 0;
+    }
+
+    .mapIcon.mine {
+        background-position: -96px 0;
+    }
+
+    .mapIcon.house {
+        background-position: -128px 0;
+    }
+
+    .mapIcon.cave {
+        background-position: 0 -32px;
+    }
+
+    .mapIcon.boss {
+        background-position: -32px -32px;
+    }
+
+    .mapIcon.start {
+        background-position: -64px -32px;
+    }
+
+    .mapIcon.ping {
+        background-position: -96px -32px;
+        animation: pulse 1.2s ease-in-out infinite;
+    }
+    .mapIcon.dead {
+        background-position: -128px -32px;
+    }
+    .mapIcon.pvp {
+        filter: hue-rotate(0deg) !important;
+    }
+.menuMapIcon {
+    position: static;
+    transform: scale(0.7);
+}
+
+.hpBar {
+    border: 1px solid #f55;
+    height: 9px;
+    width: 100%;
+    position: relative;
+}
+
+.hp {
+    width: 100%;
+    height: 100%;
+    background: #f55;
+    transition: width 0.5s linear;
+}
+
+.playerStat {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.statLabel {
+    opacity: 0.8;
+}
+
+.statValue {
+    font-variant-numeric: tabular-nums;
+}
+
+.positionStatus {
+    color: #bbb;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.playerListContainer {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 0;
+    position: fixed;
+    top: 0px;
+    right: 0px;
+    font-size: 12px;
+    transition: right 0.3s ease-in-out;
+    z-index: 20;
+    min-width: 180px;
+    text-align: left;
+}
+
+.playerListTitle {
+    font-size: 16px;
+    margin-bottom: 6px;
+    padding: 0 16px;
+}
+
+.playerListEntry {
+    cursor: pointer;
+    padding: 7px 16px;
+}
+
+.playerListEntry .name {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.playerListEntry .details {
+    display: grid;
+    gap: 2px;
+}
+
+    .playerListEntry.selected {
+        background: rgba(135, 134, 202, 0.75);
+    }
+
+.playerListTut {
+    font-size: 11px;
+    line-height: 14px;
+    margin: 8px 16px 0;
+    opacity: 0.8;
+}
+
+.topMessage {
+    position: fixed;
+    top: 6px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    color: #fff;
+    text-shadow: 0 0 6px #000, 0 0 6px #000, 0 0 3px #000;
+    font-size: 24px;
+    text-align: center;
+}
+
+.serverInfoModifiers { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; }
+.serverInfoModifier { background: #16324f; border: 1px solid #3a6ea5; border-radius: 999px; padding: 4px 12px; font-size: 13px; color: #dceaff; }
+.serverInfoModifierEmpty { color: #bbb; font-size: 13px; }
+/* Vehicles (vehicles.js). mapIcons.png has no boat/cart frames, so these are
+   pure-CSS top-down shapes sized like the 32px pin sprites. The boat body is
+   an inner .vehicleSprite node that JS rotates by the server yaw (bow-up at
+   0deg), which keeps map.js's left/top + translate(-50%, -50%) anchoring of
+   the outer marker untouched. The cart has no heading and draws directly on
+   the marker. */
+.mapIcon.boat,
+.mapIcon.cart {
+    background-image: none;
+}
+
+.menuMapIcon.boat {
+    /* Keep the menu preview's sprite anchored to the icon, not the menu. */
+    position: relative;
+}
+
+.mapIcon.boat .vehicleSprite {
+    position: absolute;
+    left: calc(50% - 7px);
+    top: calc(50% - 14px);
+    width: 14px;
+    height: 28px;
+    background: linear-gradient(180deg, #a4703a 0%, #7d4c22 55%, #5a3315 100%);
+    clip-path: polygon(50% 0, 88% 22%, 80% 82%, 50% 100%, 20% 82%, 12% 22%);
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+    .mapIcon.boat .vehicleSprite::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 55%;
+        width: 8px;
+        height: 8px;
+        margin: -4px 0 0 -4px;
+        background: #e8e4d8;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    }
+
+.mapIcon.cart::after {
+    /* wheels */
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 26px;
+    height: 18px;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(#232323, #232323) left center / 6px 18px no-repeat,
+                linear-gradient(#232323, #232323) right center / 6px 18px no-repeat;
+    border-radius: 2px;
+}
+
+.mapIcon.cart::before {
+    /* cart body, drawn over the wheels */
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 1;
+    width: 16px;
+    height: 22px;
+    transform: translate(-50%, -50%);
+    background: repeating-linear-gradient(180deg, #8a5a2b 0 5px, #6b421d 5px 6px);
+    border: 2px solid #4a2f15;
+    border-radius: 3px;
+}
+
+/* Cartography table pins (cartography.js) reuse the fire/house/mine/cave/dot
+   glyphs via iconClass; the halo plus fade marks them as table-imported. */
+.mapIcon.cartography {
+    opacity: .85;
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, .8));
+}

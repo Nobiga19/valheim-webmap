@@ -19,6 +19,10 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       # The mod compiles against the game's own assemblies, which cannot be
       # committed. They come from the dedicated server, which Steam serves to
       # anonymous logins -- so this needs no account and no secret.
@@ -72,6 +76,7 @@ jobs:
           mkdir -p libs/BepInEx
           cp -r "$RUNNER_TEMP/bep/BepInEx/core" libs/BepInEx/core
 
+      - run: npm ci
       - run: dotnet tool restore
 
       - name: Build and package

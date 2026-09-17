@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using WebMap.Patches;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
@@ -25,7 +26,9 @@ namespace WebMap
     {
         public const string GUID = "com.github.h0tw1r3.valheim.webmap";
         public const string NAME = "WebMap";
-        public const string VERSION = "2.7.1";
+        // BepInEx 5 parses this as System.Version, so keep the locally-built
+        // candidate numeric even though it is based on upstream v2.9.0.
+        public const string VERSION = "2.10.1";
 
         private static readonly string[] ALLOWED_PINS = { "dot", "fire", "mine", "house", "cave" };
 
@@ -34,9 +37,6 @@ namespace WebMap
         public static string worldDataPath;
         public static string mapDataPath;
         public static string pluginPath;
-
-        public static int sayMethodHash = 0;
-        public static int chatMessageMethodHash = 0;
 
         public static bool fogTextureNeedsSaving;
 
@@ -75,6 +75,8 @@ namespace WebMap
             StaticCoroutine.Start(StructureMap.Loop());
             StaticCoroutine.Start(Announce.Pump());
             StaticCoroutine.Start(PlayerSnapshotLoop());
+            CartographyTablePins.Start();
+            Vehicles.Start();
             NotifyOnline();
         }
 
@@ -102,7 +104,6 @@ namespace WebMap
         public void NotifyJoin(ZNetPeer peer)
         {
             string message = $"player _{peer.m_playerName}_ joined";
-            Stats.Join(peer.m_playerName);
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
             mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
         }
@@ -110,7 +111,6 @@ namespace WebMap
         public void NotifyLeave(ZNetPeer peer)
         {
             string message = $"player _{peer.m_playerName}_ left";
-            Stats.Leave(peer.m_playerName);
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
             // MessageHud is a client HUD; on a dedicated server instance is null, so
             // this threw on every disconnect. Announce.Enqueue reaches players properly.
@@ -125,9 +125,6 @@ namespace WebMap
 
             worldDataPath = Path.Combine(mapDataPath, WebMapConfig.GetWorldName());
             Directory.CreateDirectory(worldDataPath);
-            Stats.Load(worldDataPath);
-            Trails.Load(worldDataPath);
-            Chart.Load(worldDataPath);
 
             if (mapDataServer == null)
             {
@@ -144,18 +141,8 @@ namespace WebMap
             string mapImagePath = Path.Combine(worldDataPath, "map.png");
             try
             {
-                byte[] png = File.ReadAllBytes(mapImagePath);
-                // IHDR width sits at bytes 16..19; no need to decode to know the size.
-                int width = png.Length > 24 ? (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19] : 0;
-                if (width == WebMapConfig.RENDER_SIZE)
-                {
-                    mapDataServer.mapImageData = png;
-                    mapDataServer.BuildMapJpg();
-                }
-                else
-                {
-                    ZLog.Log($"WebMap: map.png is {width}px, render_size is {WebMapConfig.RENDER_SIZE}: rebuilding");
-                }
+                mapDataServer.mapImageData = File.ReadAllBytes(mapImagePath);
+                mapDataServer.BuildMapJpg();
             }
             catch (Exception e)
             {
@@ -168,8 +155,7 @@ namespace WebMap
                 Texture2D fogTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE);
                 byte[] fogBytes = File.ReadAllBytes(fogImagePath);
                 ImageConv.LoadImage(fogTexture, fogBytes);
-                mapDataServer.SetFog(fogTexture, fresh: false);
-                UnityEngine.Object.Destroy(fogTexture);
+                mapDataServer.fogTexture = fogTexture;
             }
             catch (Exception e)
             {
@@ -182,8 +168,7 @@ namespace WebMap
                 fogTexture.SetPixels32(fogColors);
                 byte[] fogPngBytes = ImageConv.EncodeToPNG(fogTexture);
 
-                mapDataServer.SetFog(fogTexture, fresh: true);
-                UnityEngine.Object.Destroy(fogTexture);
+                mapDataServer.fogTexture = fogTexture;
                 try
                 {
                     File.WriteAllBytes(fogImagePath, fogPngBytes);
@@ -218,8 +203,9 @@ namespace WebMap
         {
             while (true)
             {
-                mapDataServer.RefreshPlayerSnapshot();
-                yield return new WaitForSeconds(WebMapConfig.PLAYER_UPDATE_INTERVAL);
+                if (mapDataServer != null)
+                    mapDataServer.RefreshPlayerSnapshot();
+                yield return new WaitForSeconds(Math.Max(0.1f, WebMapConfig.PLAYER_UPDATE_INTERVAL));
             }
         }
 
@@ -238,7 +224,6 @@ namespace WebMap
             int pixelExploreRadiusSquared = pixelExploreRadius * pixelExploreRadius;
             int halfTextureSize = WebMapConfig.TEXTURE_SIZE / 2;
 
-            bool changed = false;
             mapDataServer.players.ForEach(player =>
             {
                 if (player.m_publicRefPos || WebMapConfig.ALWAYS_MAP || WebMapConfig.ALWAYS_VISIBLE)
@@ -266,15 +251,12 @@ namespace WebMap
                                     int currentExploreRadiusSquared = xDiff * xDiff + yDiff * yDiff;
                                     if (currentExploreRadiusSquared < pixelExploreRadiusSquared)
                                     {
-                                        byte[] fog = mapDataServer.fogRgba;
-                                        int o = (y * WebMapConfig.TEXTURE_SIZE + x) * 4;
-                                        if (fog != null && fog[o] != 255)
+                                        Color fogTexColor = mapDataServer.fogTexture.GetPixel(x, y);
+                                        if (fogTexColor != Color.white)
                                         {
                                             if (WebMapConfig.DEBUG && !fogTextureNeedsSaving) ZLog.Log("Fog needs saving");
                                             fogTextureNeedsSaving = true;
-                                            mapDataServer.fogPngStale = true;
-                                            changed = true;
-                                            fog[o] = fog[o + 1] = fog[o + 2] = fog[o + 3] = 255;
+                                            mapDataServer.fogTexture.SetPixel(x, y, Color.white);
                                         }
                                     }
                                 }
@@ -282,7 +264,6 @@ namespace WebMap
                     }
                 }
             });
-            if (changed) mapDataServer.fogRev++;          // once per pass, not per pixel
         }
 
         public IEnumerator SaveFogTextureLoop()
@@ -298,7 +279,7 @@ namespace WebMap
         {
             if (mapDataServer.players.Count > 0 && fogTextureNeedsSaving)
             {
-                byte[] pngBytes = mapDataServer.GetFogPng();
+                byte[] pngBytes = ImageConv.EncodeToPNG(mapDataServer.fogTexture);
 
                 if (WebMapConfig.DEBUG) ZLog.Log("Saving Fog");
 
@@ -407,35 +388,24 @@ namespace WebMap
                 }
 
                 ZLog.Log("WebMap: BUILD MAP!");
-                StaticCoroutine.Start(BuildMap());
-            }
 
-            // The terrain picture. Sampled at RENDER_SIZE, which may be finer than the
-            // overlays' TEXTURE_SIZE; it covers the same area, so the pitch is scaled
-            // to match. Yields as it goes: at 4096 this is 16M samples and used to
-            // freeze the server for the duration.
-            private static IEnumerator BuildMap()
-            {
-                int R = WebMapConfig.RENDER_SIZE;
-                float rp = WebMapConfig.PIXEL_SIZE * (float)WebMapConfig.TEXTURE_SIZE / R;
-                float step = 2f * rp / WebMapConfig.PIXEL_SIZE;   // 2f at 2048: the original look
-
-                int num = R / 2;
-                float num2 = rp / 2f;
+                int num = WebMapConfig.TEXTURE_SIZE / 2;
+                float num2 = WebMapConfig.PIXEL_SIZE / 2f;
                 Color mask;
-                Color32[] colorArray = new Color32[R * R];
-                float[] heightArray = new float[R * R];
-                for (int i = 0; i < R; i++)
+                Color32[] colorArray = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                Color32[] treeMaskArray = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                float[] heightArray = new float[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                for (int i = 0; i < WebMapConfig.TEXTURE_SIZE; i++)
                 {
-                    yield return null;                       // one row per frame: never freeze the server for this
-                    for (int j = 0; j < R; j++)
+                    for (int j = 0; j < WebMapConfig.TEXTURE_SIZE; j++)
                     {
-                        float wx = (float)(j - num) * rp + num2;
-                        float wy = (float)(i - num) * rp + num2;
+                        float wx = (float)(j - num) * WebMapConfig.PIXEL_SIZE + num2;
+                        float wy = (float)(i - num) * WebMapConfig.PIXEL_SIZE + num2;
                         Heightmap.Biome biome = WorldGenerator.instance.GetBiome(wx, wy);
                         float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out mask);
-                        colorArray[i * R + j] = GetPixelColor(biome);
-                        heightArray[i * R + j] = biomeHeight;
+                        colorArray[i * WebMapConfig.TEXTURE_SIZE + j] = GetPixelColor(biome);
+                        treeMaskArray[i * WebMapConfig.TEXTURE_SIZE + j] = GetMaskColor(wx, wy, biomeHeight, biome);
+                        heightArray[i * WebMapConfig.TEXTURE_SIZE + j] = biomeHeight;
                     }
                 }
 
@@ -445,13 +415,12 @@ namespace WebMap
 
                 for (int t = 0; t < colorArray.Length; t++)
                 {
-                    if ((t & 0x3FFFF) == 0) yield return null;
                     float h = heightArray[t];
 
-                    int tUp = t - R;
+                    int tUp = t - WebMapConfig.TEXTURE_SIZE;
                     if (tUp < 0) tUp = t;
 
-                    int tDown = t + R;
+                    int tDown = t + WebMapConfig.TEXTURE_SIZE;
                     if (tDown > colorArray.Length - 1) tDown = t;
 
                     int tRight = t + 1;
@@ -465,8 +434,8 @@ namespace WebMap
                     float hLeft = heightArray[tLeft];
                     float hDown = heightArray[tDown];
 
-                    Vector3 va = new Vector3(step, 0f, hRight - hLeft).normalized;
-                    Vector3 vb = new Vector3(0f, step, hUp - hDown).normalized;
+                    Vector3 va = new Vector3(2f, 0f, hRight - hLeft).normalized;
+                    Vector3 vb = new Vector3(0f, 2f, hUp - hDown).normalized;
                     Vector3 normal = Vector3.Cross(va, vb);
 
                     float surfaceLight = Vector3.Dot(normal, sunDir) * 0.25f + 0.75f;
@@ -483,7 +452,7 @@ namespace WebMap
                     newColors[t] = new Color(ans.r * surfaceLight, ans.g * surfaceLight, ans.b * surfaceLight, ans.a);
                 }
 
-                Texture2D newTexture = new Texture2D(R, R,
+                Texture2D newTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE,
                     TextureFormat.RGBA32, false);
                 newTexture.SetPixels(newColors);
                 byte[] pngBytes = ImageConv.EncodeToPNG(newTexture);
@@ -518,7 +487,6 @@ namespace WebMap
                 {
                     ZLog.LogError("WebMap: failed to find starting point");
                 }
-                mapDataServer.RefreshConfig();               // the start position is part of /config
 
                 WebMap.instance.Online();
 
@@ -540,8 +508,6 @@ namespace WebMap
         {
             private static void Postfix()
             {
-                Stats.Save();
-                Trails.Save();
                 mapDataServer.Stop();
                 WebMap.instance.NotifyOffline();
             }
@@ -580,13 +546,13 @@ namespace WebMap
             }
         }
 
-        // Chat in 1.0 is addressed to each recipient, not broadcast, so the server's
-        // HandleRoutedRPC never sees it:
+        // Chat in 1.0 is addressed once per recipient. A packet addressed to the
+        // server takes HandleRoutedRPC; copies for other players take RouteRPC while
+        // the server forwards them:
         //     if (target == m_id || target == 0) HandleRoutedRPC(data);
         //     if (m_server && target != m_id)    RouteRPC(data);
-        // RouteRPC is the branch a player-to-player message takes, and the server runs
-        // it while forwarding. Observing there needs no fake server player, so it stays
-        // clear of the join path that patch breaks.
+        // In particular, with only one connected client the server-targeted copy is
+        // the only one, so command interception must remain in HandleRoutedRPC too.
         //
         // A shout is sent once per recipient, so the same message arrives N times and
         // has to be de-duplicated. Everybody-targeted RPCs (pings) are skipped, since
@@ -594,21 +560,25 @@ namespace WebMap
         [HarmonyPatch(typeof(ZRoutedRpc), "RouteRPC")]
         private class ZRoutedRpcRoutePatch
         {
-            private static readonly Dictionary<string, float> recent = new Dictionary<string, float>();
+            private const int MaximumTrackedRpcs = 256;
+            private static readonly Dictionary<string, RoutedRpcBatch> recent = new Dictionary<string, RoutedRpcBatch>();
+            private static readonly Queue<string> recentOrder = new Queue<string>();
 
-            private static readonly int SayHash = "Say".GetStableHashCode();
-            private static readonly int ChatHash = "ChatMessage".GetStableHashCode();
+            private sealed class RoutedRpcBatch
+            {
+                internal readonly HashSet<long> Targets = new HashSet<long>();
+                internal long FirstTarget;
+
+                internal RoutedRpcBatch(long firstTarget)
+                {
+                    FirstTarget = firstTarget;
+                    Targets.Add(firstTarget);
+                }
+            }
 
             private static void Prefix(ref ZRoutedRpc __instance, RoutedRPCData rpcData)
             {
                 if (rpcData == null || rpcData.m_targetPeerID == 0L) return;
-                // Decide whether this is chat before doing anything else. The server
-                // forwards every routed RPC between players through here -- thousands
-                // a second with a few people on -- and hashing each one's body to
-                // de-duplicate it was a per-RPC tax on the game thread. Only a chat
-                // shout needs de-duplicating, since it arrives once per recipient.
-                int h = rpcData.m_methodHash;
-                if (h != SayHash && h != ChatHash) return;
                 try
                 {
                     if (IsDuplicate(rpcData)) return;
@@ -624,26 +594,33 @@ namespace WebMap
             private static bool IsDuplicate(RoutedRPCData d)
             {
                 byte[] body = d.m_parameters != null ? d.m_parameters.GetArray() : null;
-                uint h = 2166136261u;
-                if (body != null)
-                    foreach (byte b in body) { h ^= b; h *= 16777619u; }
-                string key = d.m_senderPeerID + ":" + d.m_methodHash + ":" + h;
-                float now = Time.realtimeSinceStartup;
-                if (recent.TryGetValue(key, out float seen) && now - seen < 2f) return true;
-                recent[key] = now;
-                if (recent.Count > 256)
+                string key = d.m_senderPeerID + ":" + d.m_methodHash + ":" + Convert.ToBase64String(body ?? new byte[0]);
+                if (!recent.TryGetValue(key, out RoutedRpcBatch batch))
                 {
-                    var stale = new List<string>();
-                    foreach (var kv in recent) if (now - kv.Value > 10f) stale.Add(kv.Key);
-                    foreach (var k in stale) recent.Remove(k);
+                    recent.Add(key, new RoutedRpcBatch(d.m_targetPeerID));
+                    recentOrder.Enqueue(key);
+                    while (recentOrder.Count > MaximumTrackedRpcs)
+                        recent.Remove(recentOrder.Dequeue());
+                    return false;
                 }
-                return false;
+
+                if (batch.FirstTarget == d.m_targetPeerID)
+                {
+                    batch.Targets.Clear();
+                    batch.Targets.Add(d.m_targetPeerID);
+                    return false;
+                }
+
+                batch.Targets.Add(d.m_targetPeerID);
+                return true;
             }
         }
 
         [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
         private class ZRoutedRpcPatch
         {
+            private static string[] ignoreRpc = { "DestroyZDO", "SetEvent", "OnTargeted", "Step" };
+
             private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data) => Observe(ref __instance, ref data);
 
             internal static void Observe(ref ZRoutedRpc __instance, ref RoutedRPCData data)
@@ -655,11 +632,15 @@ namespace WebMap
                 // NullReferenceException each time the sender was not a live peer.
                 int hash = data?.m_methodHash ?? 0;
                 if (hash == 0) return;          // no data: must not match the caches, which start at 0
-                bool isSay = hash == sayMethodHash || hash == "Say".GetStableHashCode();
-                bool isChat = hash == chatMessageMethodHash || hash == "ChatMessage".GetStableHashCode();
+                bool isSay = hash == "Say".GetStableHashCode();
+                bool isChat = hash == "ChatMessage".GetStableHashCode();
                 if (!isSay && !isChat)
                 {
-                    if (WebMapConfig.DEBUG) ZLog.Log("RoutedRPC: " + hash);
+                    if (WebMapConfig.DEBUG)
+                    {
+                        string other = StringExtensionMethods_Patch.GetStableHashName(hash);
+                        if (!Array.Exists(ignoreRpc, x => x == other)) ZLog.Log("RoutedRPC: " + other);
+                    }
                     return;
                 }
 
@@ -679,7 +660,6 @@ namespace WebMap
 
                 if (isSay)
                 {
-                    sayMethodHash = data.m_methodHash;
                     try
                     {
                         ZDO zdoData = ZDOMan.instance.GetZDO(peer.m_characterID);
@@ -760,7 +740,6 @@ namespace WebMap
                             if (messageType != (int)Talker.Type.Whisper)
                             {
                                 mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
-                                Stats.Chat(userInfo.Name);
                             }
                             // one console line per chat message and per ping is spam on a
                             // busy server; the web feed is where these are meant to be read
@@ -775,7 +754,6 @@ namespace WebMap
                 }
                 else
                 {
-                    chatMessageMethodHash = data.m_methodHash;
                     try
                     {
                         ZPackage package = new ZPackage(data.m_parameters.GetArray());
@@ -796,8 +774,6 @@ namespace WebMap
                             message = message.Trim();
 
                             mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
-
-                            Stats.Chat(userInfo.Name);
                             if (WebMapConfig.DEBUG)
                                 ZLog.Log($"WebMap: (chat) {pos} | {messageType} | {userInfo.Name} | {message}");
                         }

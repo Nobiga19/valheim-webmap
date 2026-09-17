@@ -1,102 +1,25 @@
 # Changelog
 
-## Unreleased
+## 2.10.1
 
-* A Layers card on the map, as on Google Maps: a thumbnail of the other ground in the
-  corner, and behind it the choice of ground -- the world render, or the flat biome
-  atlas the portals page draws on, which carries no forest shading -- and presets of
-  the legend (Default, Travel, Builds, Wilds, Bare). `L` cycles the ground. Graves are
-  off by default, like portals.
-* One sidebar shell for the map, the portals and the plan: the ☰ in the bar folds it
-  away, and the choice holds across pages. The portals page now draws its diagram
-  full-height with the hub and pair lists beside it instead of a boxed chart above them.
-* Phones: the sidebar is a drawer, shut on arrival, opened by the ☰ or by the online
-  pill on the map; the layers tray opens upward; the bar fades at its edge where it
-  swipes.
-* Torches and fires: a Details row in the Layers card, off by default, draws torches,
-  fire pits, hearths and braziers as warm points over the map -- one glow where a base
-  is kept -- and a burnt-out one as a grey ring. The sweep now reads each fire's fuel
-  and sends it as a fifth field on those pieces; a viewer on an older server treats
-  every fire as lit.
-* Deaths and trails, two more details in the Layers card. Every death is kept with
-  where it happened (`deaths` in `/state`, the last 500) and drawn as a red glow that
-  fades over a month. Trails count, per map pixel, the times a player walked into it,
-  kept in `trails.bin` beside the stats and rendered each sweep as `/trails`, a faint
-  blue over the ground; `rev.trails` in `/state` says when it moved.
-* The bundled viewer's file cache keys on each file's timestamp, so a viewer file
-  replaced on disk is served at once instead of after the next restart.
-* One style system in `site.css`: the tokens (surfaces, ink, accents, radii, shadows),
-  the base, and the pieces every page shares -- cards, stats, buttons, chips, fields,
-  the legend, the map's button column, section rules. The pages' own styles shrank
-  to what each alone draws. The bar underlines the page you are on, controls ease
-  between states, focus is visible, and scrollbars are thin everywhere.
-
-## 2.11.0
-
-* The bundled viewer is now the same site that fronts our own server: the live map with
-  builds drawn as shaded roofs and floor plans, the portal atlas on a biome chart, the
-  planning board, and the players page — served by the mod on its own port, so it needs
-  no proxy and no hosting. The old viewer, its webpack build and the websocket pings it
-  showed are gone; the pages poll `/state` instead.
-* Pages are served with `no-cache` so a new build shows on the next visit; assets for
-  five minutes. They were cached for a week.
+* The "Servidor" view now mirrors the deployed system: the mod catalog lists only the
+  plugins actually loaded (WebMap, Server Devcommands, ValheimTune); the dismissed
+  modpack candidates are removed from the public projection entirely.
+* Add gameplay-impacting server variables to `/api/server-info`: server name,
+  visibility, and the active native world modifiers (for example the resources x2 rate).
+* Expose an allowlisted, live snapshot of the ValheimTune settings that affect server
+  performance, networking, and saving. Unknown configuration keys stay private.
 
 ## 2.10.0
 
-* `render_size`: the world render at its own resolution. 4096 halves the metres per pixel
-  over the same area; the overlays stay at `texture_size`. The render is a coroutine that
-  yields every row, so it no longer freezes the server, and a `map.png` of the wrong width
-  is rebuilt rather than served.
-* Structure sweeps run only while someone is reading the map. A request to any layer or
-  sweep-fed JSON arms them for two minutes and they start at least a minute apart; an idle
-  server does no sweep work. The fixed two-minute timer and the immediate re-sweep on
-  `/structures/refresh` are gone. Every sweep measures itself — ZDOs, game-thread
-  milliseconds for walk and finish, frames yielded, wall time, gen-2 collections — as a
-  `sweep` field on `/structures/stats` and one log line.
-* `/pieces`: every placed piece as `[prefab, x, z, yaw]` against a small table of prefab
-  footprint and colour, for viewers that draw builds as vectors. Recorded in the same sweep
-  and the same ZDO visit; about 60 KB for a world.
-* `/portals`: portals with their tag and the portal each is linked to, taken from the
-  game's own connection rather than from matching names.
-* `/graves`: tombstones still holding gear, with owner and seconds since the death.
-* The chat observer compares the method hash before doing anything else. It used to hash,
-  key and de-duplicate every routed RPC the server forwards, on the game thread, thousands
-  a second with a few players on. Also removed: a postfix on `GetStableHashCode` that wrote
-  two dictionaries on every string the game hashes, and the `ZSyncAnimation` hooks beside it.
-* `/fog` encodes its PNG once per change instead of on every request, and request paths
-  drop their query string before routing, so a cache-busting parameter no longer 404s.
-* Player state is read by ZDOVars hash and `/config` is built on the game thread when the
-  world loads, so HTTP threads no longer touch `ZNet`.
-* Everything a sweep does after the walk — rendering the overlays, the forest blur, the
-  JSON, the PNG encodes — runs on a pool thread. The game thread pays for the walk and
-  nothing else; the ~140 ms finish it used to absorb is gone. Overlays are encoded with
-  `EncodeArrayToPNG`, which Unity marks thread-safe; `EncodeToPNG` on a `Texture2D`, which
-  was being called from HTTP threads, is not.
-* The fog is kept as bytes and encoded the same thread-safe way; it was a `Texture2D`
-  encoded on HTTP threads while the game thread painted it. `/structures/refresh` is gone:
-  reading any layer arms a sweep, which is all it did.
-* `/state`: every small JSON block in one document per tick, with a content revision per
-  layer. A viewer polls one URL and fetches a layer only when its revision moved; `?v=` on
-  a layer request lets a cache keep it as long as it likes. The bundled viewer polls it
-  every 30 s instead of re-pulling both overlays on timers, and loads the world render as
-  the JPEG: browsers gave up on the 16 MB PNG a 4096 render produces part way through,
-  after which the viewer never got to its overlays, pins or messages.
-* `/chart`: the world as a flat chart, each pixel its biome's colour and water one blue,
-  sampled from the world generator once per world and kept beside `map.png`.
-* Traders (Haldor, Hildir, the Bog Witch) in `/state`, in explored ground only: the world
-  generated them, and a player's own map pins them once they have been near.
-* `/stats/players`: per-player tallies — joins, deaths, chat lines, distance covered, portal
-  hops, pins, and what is standing in the world with their name on it (pieces, portals,
-  ships, graves). No time played, by design. Persisted beside the world's map data.
-
-## 2.9.1
-
-* Removed a Harmony prefix on `ZRoutedRpc.InvokeRoutedRPC` that ran for every outgoing
-  routed RPC and did nothing unless `debug` or `test` was set. Chat is observed at
-  `RouteRPC` instead, so it was redundant as well as costly.
-* Removed the `test` setting it existed for, which rerouted `DiscoverLocationRespons` to
-  everybody, and `discord_invite_url`, which was read by nothing at all.
-* Removed `MapDataServer.BroadcastMessage`, which had no callers.
+* Remove the experimental inventory-item chat command and its incoming routed-RPC
+  interception.
+* Add the read-only `/api/server-info` endpoint and the Spanish “Servidor” viewer.
+  The endpoint has a fixed catalog, status allowlist, and public-config allowlist so
+  sensitive server details and future configuration keys stay private by default.
+* Keep players with hidden or malformed positions out of the map while retaining their
+  status and resource values in the player list, and make WebSocket URLs independent
+  of the current page path and query string.
 
 ## 2.9.0
 
